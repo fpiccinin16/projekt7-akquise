@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>projekt7 Lead-Cockpit</title>
+    <style>
+        :root {
+            --brand-navy: #1f2a44;
+            --brand-accent: #d97706;
+            --brand-accent-hover: #b45309;
+            --bg-page: #f8fafc;
+            --border-color: #e2e8f0;
+            --text-dark: #0f172a;
+            --text-muted: #64748b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-page);
+            color: var(--text-dark);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Header */
+        header {
+            background-color: var(--brand-navy);
+            color: white;
+            padding: 12px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 3px solid var(--brand-accent);
+            flex-shrink: 0;
+        }
+
+        .header-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-title h1 {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+
+        .header-title span.badge {
+            background-color: var(--brand-accent);
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .header-meta {
+            font-size: 13px;
+            opacity: 0.85;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        button.btn {
+            padding: 8px 14px;
+            border-radius: 5px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.15s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        button.btn-outline {
+            background: transparent;
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+        }
+
+        button.btn-outline:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        button.btn-primary {
+            background: var(--brand-accent);
+            color: white;
+        }
+
+        button.btn-primary:hover {
+            background: var(--brand-accent-hover);
+        }
+
+        /* KPI Tiles */
+        .kpi-bar {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            padding: 16px 24px;
+            background: white;
+            border-bottom: 1px solid var(--border-color);
+            flex-shrink: 0;
+        }
+
+        .kpi-card {
+            background: var(--bg-page);
+            border-radius: 6px;
+            padding: 12px 16px;
+            border-left: 4px solid var(--brand-navy);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .kpi-card.red { border-left-color: var(--brand-accent); }
+        .kpi-card.blue { border-left-color: #3b82f6; }
+        .kpi-card.green { border-left-color: #10b981; }
+
+        .kpi-card .kpi-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            font-weight: 700;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .kpi-card .kpi-val {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--brand-navy);
+        }
+
+        /* Filter Bar */
+        .filter-bar {
+            background: white;
+            padding: 12px 24px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            flex-wrap: wrap;
+            flex-shrink: 0;
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 220px;
+            position: relative;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 7px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            font-size: 13px;
+        }
+
+        .filter-bar select {
+            padding: 7px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            font-size: 13px;
+            background: white;
+            color: var(--text-dark);
+        }
+
+        /* Main Workspace (Split View) */
+        .workspace {
+            display: grid;
+            grid-template-columns: 58% 42%;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Leads Table View (Left) */
+        .table-pane {
+            overflow-y: auto;
+            border-right: 1px solid var(--border-color);
+            background: white;
+        }
+
+        table.leads-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        table.leads-table th {
+            position: sticky;
+            top: 0;
+            background: #f1f5f9;
+            color: var(--text-muted);
+            text-align: left;
+            padding: 10px 14px;
+            font-weight: 600;
+            font-size: 11px;
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--border-color);
+            z-index: 10;
+        }
+
+        table.leads-table tr {
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: background 0.1s ease;
+        }
+
+        table.leads-table tr:hover {
+            background-color: #f8fafc;
+        }
+
+        table.leads-table tr.selected {
+            background-color: #eff6ff;
+            border-left: 4px solid var(--brand-accent);
+        }
+
+        table.leads-table td {
+            padding: 12px 14px;
+            vertical-align: middle;
+        }
+
+        .company-col strong {
+            display: block;
+            color: var(--brand-navy);
+            font-size: 14px;
+        }
+
+        .company-col span {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .pill {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .pill-status {
+            background: #e2e8f0;
+            color: #334155;
+        }
+
+        .pill-status.zur-prüfung { background: #fee2e2; color: #b91c1c; }
+        .pill-status.freigegeben { background: #dcfce7; color: #15803d; }
+        .pill-status.beobachten { background: #e0f2fe; color: #0369a1; }
+        .pill-status.kontaktiert, .pill-status.nachgefasst_1, .pill-status.nachgefasst_2 { background: #fef3c7; color: #b45309; }
+        .pill-status.zu-bewerten { background: #ede9fe; color: #6d28d9; }
+        .pill-status.termin, .pill-status.interesse { background: #bbf7d0; color: #166534; }
+        .pill-status.fehler { background: #fde68a; color: #92400e; }
+        .pill-status.kalt, .pill-status.verworfen { background: #f1f5f9; color: #64748b; }
+        .pill-kanal { background: #f1f5f9; color: #334155; }
+        .pill-kanal.import { background: #ede9fe; color: #6d28d9; }
+
+        .modal-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); display: none; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+        .modal-backdrop.open { display: flex; }
+        .modal { background: white; border-radius: 8px; width: 100%; max-width: 680px; max-height: 90vh; overflow-y: auto; padding: 20px 24px; }
+        .modal h2 { font-size: 18px; color: var(--brand-navy); margin-bottom: 6px; }
+        .modal p.hint { font-size: 13px; color: var(--text-muted); margin-bottom: 14px; }
+        .dropzone { display: block; margin-top: 4px; border: 2px dashed var(--border-color); border-radius: 8px; padding: 22px; text-align: center; font-size: 13px; color: var(--text-muted); cursor: pointer; }
+        .dropzone.drag { border-color: var(--brand-accent); background: #fffbeb; }
+        table.mini { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+        table.mini th, table.mini td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--border-color); vertical-align: top; }
+        table.mini th { color: var(--text-muted); font-weight: 600; }
+        .result-ok { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; border-radius: 6px; padding: 10px 12px; font-size: 13px; margin-top: 12px; }
+        .result-err { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; border-radius: 6px; padding: 10px 12px; font-size: 13px; margin-top: 12px; }
+        .historie-box { background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 6px; padding: 12px; font-size: 13px; color: #4c1d95; }
+
+        .pill-segment-a { background: #e0f2fe; color: #0369a1; }
+        .pill-segment-b { background: #f3e8ff; color: #7e22ce; }
+        .pill-segment-c { background: #f1f5f9; color: #475569; }
+
+        .score-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 700;
+            font-size: 12px;
+            min-width: 44px;
+            white-space: nowrap;
+        }
+
+        .score-a { background: var(--brand-accent); color: white; }
+        .score-b { background: #3b82f6; color: white; }
+        .score-c { background: #94a3b8; color: white; }
+
+        /* Detail Panel View (Right) */
+        .detail-pane {
+            overflow-y: auto;
+            padding: 20px 24px;
+            background: white;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 14px;
+        }
+
+        .detail-header h2 {
+            font-size: 20px;
+            color: var(--brand-navy);
+            margin-bottom: 4px;
+        }
+
+        .detail-header .meta-sub {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .score-progress-box {
+            background: var(--bg-page);
+            border-radius: 6px;
+            padding: 14px;
+            border: 1px solid var(--border-color);
+        }
+
+        .score-progress-bar {
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+
+        .score-progress-fill {
+            height: 100%;
+            background: var(--brand-accent);
+            border-radius: 4px;
+        }
+
+        .section-title {
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .criteria-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .criterion-row {
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 10px 12px;
+            font-size: 13px;
+        }
+
+        .criterion-row.fulfilled {
+            border-left: 4px solid #10b981;
+            background: #f0fdf4;
+        }
+
+        .criterion-row.unfulfilled {
+            border-left: 4px solid #cbd5e1;
+            background: white;
+            opacity: 0.7;
+        }
+
+        .criterion-top {
+            display: flex;
+            justify-content: space-between;
+            font-weight: 600;
+        }
+
+        .criterion-quote {
+            margin-top: 6px;
+            font-size: 12px;
+            font-style: italic;
+            color: #334155;
+            background: rgba(0, 0, 0, 0.03);
+            padding: 6px 8px;
+            border-radius: 4px;
+        }
+
+        .action-card {
+            background: #fff1f2;
+            border: 1px solid #fecdd3;
+            border-radius: 6px;
+            padding: 16px;
+        }
+
+        .action-card h3 {
+            font-size: 15px;
+            color: #9f1239;
+            margin-bottom: 12px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .btn-green {
+            background: #10b981;
+            color: white;
+        }
+        .btn-green:hover { background: #059669; }
+
+        .btn-gray {
+            background: #64748b;
+            color: white;
+        }
+
+        .field-group {
+            margin-bottom: 10px;
+        }
+
+        .field-group label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: var(--text-dark);
+        }
+
+        .field-group select, .field-group input, .field-group textarea {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            font-size: 13px;
+            background: white;
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 900px) {
+            .workspace {
+                grid-template-columns: 1fr;
+                overflow-y: auto;
+            }
+            .table-pane {
+                border-right: none;
+                border-bottom: 2px solid var(--border-color);
+                max-height: 50vh;
+            }
+            .kpi-bar {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <div class="header-title">
+            <h1>projekt7 <span style="color: var(--brand-accent);">Lead-Cockpit</span></h1>
+            <span class="badge" id="version-badge">v1.0.0</span>
+        </div>
+        <div class="header-meta">
+            <span id="last-run-info">Letzter Lauf: Lädt...</span>
+        </div>
+        <div class="header-actions">
+            <button class="btn btn-outline" onclick="openImport()">Adressliste importieren</button>
+            <button class="btn btn-outline" onclick="exportCSV()">CSV exportieren</button>
+            <button class="btn btn-primary" id="run-btn" onclick="triggerRun()">Lauf starten</button>
+        </div>
+    </header>
+
+    <!-- KPI Tiles -->
+    <div class="kpi-bar">
+        <div class="kpi-card red">
+            <div class="kpi-label">A-Leads zur Prüfung</div>
+            <div class="kpi-val" id="kpi-a-leads">-</div>
+        </div>
+        <div class="kpi-card" style="border-left-color: #7c3aed;">
+            <div class="kpi-label">Adressen zu bewerten</div>
+            <div class="kpi-val" id="kpi-zu-bewerten">-</div>
+        </div>
+        <div class="kpi-card blue">
+            <div class="kpi-label">Fällige Nachfass-Mails</div>
+            <div class="kpi-val" id="kpi-nachfass">-</div>
+        </div>
+        <div class="kpi-card green">
+            <div class="kpi-label">Termine vereinbart</div>
+            <div class="kpi-val" id="kpi-termine">-</div>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar">
+        <div class="search-box">
+            <input type="text" id="filter-search" placeholder="Suche nach Firma, Ort, Branche, Kontakt, Historie..." oninput="debounceFilter()">
+        </div>
+        <select id="filter-status" onchange="loadLeads()">
+            <option value="">Status: Alle</option>
+            <option value="zu bewerten">zu bewerten</option>
+            <option value="zur Prüfung">zur Prüfung</option>
+            <option value="beobachten">beobachten</option>
+            <option value="freigegeben">freigegeben</option>
+            <option value="kontaktiert">kontaktiert</option>
+            <option value="nachgefasst_1">nachgefasst 1</option>
+            <option value="nachgefasst_2">nachgefasst 2</option>
+            <option value="interesse">Interesse</option>
+            <option value="termin">Termin</option>
+            <option value="kalt">kalt</option>
+            <option value="verworfen">verworfen</option>
+            <option value="fehler">Fehler</option>
+        </select>
+        <select id="filter-klasse" onchange="loadLeads()">
+            <option value="">Klasse: Alle</option>
+            <option value="A">Klasse A</option>
+            <option value="B">Klasse B</option>
+            <option value="C">Klasse C</option>
+        </select>
+        <select id="filter-segment" onchange="loadLeads()">
+            <option value="">Segment: Alle</option>
+            <option value="A">Produktion</option>
+            <option value="B">Handel</option>
+            <option value="C">andere Branche</option>
+        </select>
+        <select id="filter-kanal" onchange="loadLeads()">
+            <option value="">Herkunft: Alle</option>
+            <option value="Adressliste">Adressliste</option>
+            <option value="KI-Websuche">KI-Websuche</option>
+        </select>
+    </div>
+
+    <!-- Workspace Split View -->
+    <div class="workspace">
+        <!-- Left: Table -->
+        <div class="table-pane">
+            <table class="leads-table">
+                <thead>
+                    <tr>
+                        <th>Unternehmen</th>
+                        <th>Segment</th>
+                        <th>Herkunft</th>
+                        <th>Signal</th>
+                        <th>Score</th>
+                        <th>Status</th>
+                        <th style="width: 36px;"></th>
+                    </tr>
+                </thead>
+                <tbody id="leads-tbody">
+                    <tr><td colspan="7" style="text-align: center; padding: 20px;">Lade Leads...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Right: Detail Panel -->
+        <div class="detail-pane" id="detail-pane">
+            <div style="text-align: center; padding: 60px 20px; color: var(--text-muted);">
+                Wähle einen Lead aus der Tabelle links aus, um Details und Bewertungskriterien anzuzeigen.
+            </div>
+        </div>
+    </div>
+
+    <!-- Import-Dialog -->
+    <div class="modal-backdrop" id="import-modal" onclick="if (event.target === this) closeImport()">
+        <div class="modal">
+            <h2>Adressliste importieren</h2>
+            <p class="hint">Excel (.xlsx) oder CSV. Spalten wie Firma, Website, Ort, Kontakt, E-Mail, Bemerkung werden automatisch erkannt.
+                Alle Firmen werden neu recherchiert und bewertet; frühere Bemerkungen bleiben als Historie sichtbar.
+                <a href="/api/import/vorlage.xlsx" style="color: #2563eb;">Vorlage herunterladen</a></p>
+            <label class="dropzone" id="dropzone">
+                <input type="file" id="import-file" accept=".xlsx,.xlsm,.csv" style="display: none;" onchange="previewImport(this.files[0])">
+                <span id="dropzone-text">Datei hierher ziehen oder klicken, um sie auszuwählen</span>
+            </label>
+            <div id="import-preview"></div>
+            <div class="action-buttons" style="justify-content: flex-end;">
+                <button class="btn btn-gray" onclick="closeImport()">Schliessen</button>
+                <button class="btn btn-primary" id="import-confirm" style="display: none;" onclick="confirmImport()">Importieren</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentLeads = [];
+        let importFile = null;
+        let selectedLeadId = null;
+        let debounceTimer = null;
+
+        function esc(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        const SEGMENTE = { A: 'Produktion', B: 'Handel', C: 'andere Branche' };
+
+        function formatSegment(seg) {
+            return SEGMENTE[String(seg || 'C').trim().toUpperCase()] || seg;
+        }
+
+        function formatSegmentBadge(seg) {
+            const s = String(seg || 'C').toUpperCase();
+            const cls = s === 'A' ? 'pill-segment-a' : (s === 'B' ? 'pill-segment-b' : 'pill-segment-c');
+            return `<span class="pill ${cls}">${formatSegment(s)}</span>`;
+        }
+
+        const FELDNAMEN = { firma: 'Firma', website: 'Website', strasse: 'Strasse', plz: 'PLZ', ort: 'Ort', plz_ort: 'PLZ und Ort',
+            kanton: 'Kanton', branche: 'Branche', groesse: 'Mitarbeitende', kontakt_name: 'Kontakt', vorname: 'Vorname',
+            nachname: 'Nachname', anrede: 'Anrede', kontakt_rolle: 'Funktion', kontakt_email: 'E-Mail',
+            kontakt_tel: 'Telefon', historie: 'Historie (Bemerkungen)' };
+
+        function formatKanal(k) {
+            const isImport = (k || '').includes('Adressliste');
+            return `<span class="pill pill-kanal ${isImport ? 'import' : ''}">${esc(isImport ? 'Adressliste' : 'Websuche')}</span>`;
+        }
+
+        async function init() {
+            await loadKPIs();
+            await loadLeads();
+        }
+
+        async function loadKPIs() {
+            try {
+                const res = await fetch('/api/kpis');
+                const data = await res.json();
+                document.getElementById('kpi-a-leads').innerText = data.a_leads_zur_pruefung;
+                document.getElementById('kpi-nachfass').innerText = data.faellige_nachfass;
+                document.getElementById('kpi-zu-bewerten').innerText = data.zu_bewerten;
+                document.getElementById('kpi-termine').innerText = data.termine;
+                document.getElementById('version-badge').innerText = 'Modell v' + data.modell_version + ' · ' + data.leads_gesamt + ' Leads';
+                if (data.letzter_lauf) {
+                    document.getElementById('last-run-info').innerText = 'Letzter Lauf: ' + data.letzter_lauf.datum.slice(0, 16).replace('T', ' ');
+                } else {
+                    document.getElementById('last-run-info').innerText = 'Noch kein Lauf';
+                }
+            } catch (e) {
+                console.error("Fehler beim Laden der KPIs:", e);
+            }
+        }
+
+        function debounceFilter() {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(loadLeads, 250);
+        }
+
+        async function loadLeads() {
+            const search = document.getElementById('filter-search').value;
+            const status = document.getElementById('filter-status').value;
+            const klasse = document.getElementById('filter-klasse').value;
+            const segment = document.getElementById('filter-segment').value;
+            const kanal = document.getElementById('filter-kanal').value;
+
+            const params = new URLSearchParams();
+            if (search) params.append('search', search);
+            if (status) params.append('status', status);
+            if (klasse) params.append('klasse', klasse);
+            if (segment) params.append('segment', segment);
+            if (kanal) params.append('kanal', kanal);
+
+            try {
+                const res = await fetch('/api/leads?' + params.toString());
+                currentLeads = await res.json();
+                renderTable();
+            } catch (e) {
+                console.error("Fehler beim Laden der Leads:", e);
+            }
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('leads-tbody');
+            if (currentLeads.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 30px; color: var(--text-muted);">Keine Leads gefunden. Importiere eine Adressliste oder starte einen Lauf.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = currentLeads.map(lead => {
+                const isSelected = lead.lead_id === selectedLeadId ? 'selected' : '';
+                const scoreClass = lead.klasse === 'A' ? 'score-a' : (lead.klasse === 'B' ? 'score-b' : 'score-c');
+                const statusSlug = (lead.status || 'neu').replace(/\s+/g, '-');
+
+                return `
+                <tr class="${isSelected}" onclick="selectLead('${lead.lead_id}')">
+                    <td class="company-col">
+                        <strong>${esc(lead.firma)}</strong>
+                        <span>${esc(lead.ort || (lead.domain.startsWith('name:') ? 'Website offen' : lead.domain))} | ${esc(lead.branche || 'Branche offen')}</span>
+                    </td>
+                    <td>${lead.status === 'zu bewerten' ? '<span class="pill pill-segment-c">offen</span>' : formatSegmentBadge(lead.segment)}</td>
+                    <td>${formatKanal(lead.quelle_kanal)}</td>
+                    <td style="font-size: 12px; color: var(--text-muted); max-width: 220px;">${esc((lead.kaufsignal || '').slice(0, 90))}</td>
+                    <td>
+                        ${lead.status === 'zu bewerten' ? '<span style="color: var(--text-muted);">–</span>' : `<span class="score-badge ${scoreClass}">${lead.score} (${lead.klasse})</span>`}
+                    </td>
+                    <td>
+                        <span class="pill pill-status ${statusSlug}">${esc(lead.status)}</span>
+                    </td>
+                    <td style="text-align: center;" onclick="event.stopPropagation();">
+                        <button title="Lead löschen (irrelevant)" style="background: none; border: none; cursor: pointer; color: #94a3b8; font-size: 14px; padding: 4px; border-radius: 4px;" onmouseover="this.style.color='#ef4444'; this.style.backgroundColor='#fee2e2';" onmouseout="this.style.color='#94a3b8'; this.style.backgroundColor='transparent';" onclick="deleteLead('${lead.lead_id}')">🗑️</button>
+                    </td>
+                </tr>
+                `;
+            }).join('');
+
+            // Falls noch keiner ausgewählt ist, ersten auswählen
+            if (!selectedLeadId && currentLeads.length > 0) {
+                selectLead(currentLeads[0].lead_id);
+            }
+        }
+
+        async function selectLead(leadId) {
+            selectedLeadId = leadId;
+            renderTable(); // Markiert Zeile als selected
+
+            const pane = document.getElementById('detail-pane');
+            pane.innerHTML = '<div style="text-align: center; padding: 40px;">Lade Lead-Details...</div>';
+
+            try {
+                const res = await fetch('/api/leads/' + leadId);
+                const lead = await res.json();
+                renderDetail(lead);
+            } catch (e) {
+                pane.innerHTML = '<div style="color: red; padding: 20px;">Fehler beim Laden des Leads.</div>';
+            }
+        }
+
+        function renderDetail(lead) {
+            const pane = document.getElementById('detail-pane');
+            const scoreClass = lead.klasse === 'A' ? 'score-a' : (lead.klasse === 'B' ? 'score-b' : 'score-c');
+            const teilscores = lead.teilscores || {};
+
+            // Teilscores HTML
+            const katalog = lead.kriterien_katalog || {};
+            const criteriaHtml = Object.entries(teilscores).map(([k, pts]) => {
+                const fulfilled = pts > 0;
+                const meta = katalog[k] || {};
+                return `
+                <div class="criterion-row ${fulfilled ? 'fulfilled' : 'unfulfilled'}">
+                    <div class="criterion-top">
+                        <span>${esc(meta.label || k)}</span>
+                        <span>${pts} / ${meta.max_punkte ?? '?'} Pkt.</span>
+                    </div>
+                </div>
+                `;
+            }).join('');
+
+            // Quellen
+            const quellenHtml = (lead.quellen || []).map(q => `<li><a href="${esc(q)}" target="_blank" style="color: #3b82f6;">${esc(q)}</a></li>`).join('');
+
+            // Ansprechperson
+            const kontaktName = lead.kontakt_name || 'nicht ermittelt';
+            const kontaktRolle = lead.kontakt_rolle || 'nicht ermittelt';
+            const kontaktEmail = lead.kontakt_email ? `<a href="mailto:${esc(lead.kontakt_email)}">${esc(lead.kontakt_email)}</a>` : 'nicht ermittelt';
+            const kontaktTel = lead.kontakt_tel || 'nicht ermittelt';
+
+            // Freigabe-Aktionsbox
+            let actionHtml = '';
+            if (lead.status === 'zu bewerten') {
+                actionHtml = `
+                <div class="action-card" style="background: #f5f3ff; border-color: #ddd6fe;">
+                    <h3 style="color: #5b21b6;">Noch nicht bewertet</h3>
+                    <p style="font-size: 13px; color: #6d28d9;">Diese Adresse stammt aus der importierten Liste${lead.import_datei ? ' (' + esc(lead.import_datei) + ')' : ''}.
+                    Sie wird im nächsten Lauf recherchiert und bewertet${lead.domain.startsWith('name:') ? '; die Website wird dabei per Websuche ermittelt' : ''}.</p>
+                </div>`;
+            } else if (lead.status === 'fehler') {
+                actionHtml = `
+                <div class="action-card" style="background: #fffbeb; border-color: #fde68a;">
+                    <h3 style="color: #92400e;">Bewertung nicht möglich</h3>
+                    <p style="font-size: 13px; color: #92400e;">${esc(lead.begruendung)} Die Website kann in der Excel-Datei ergänzt und die Adresse erneut importiert werden.</p>
+                </div>`;
+            } else if (lead.status === 'zur Prüfung') {
+                actionHtml = `
+                <div class="action-card">
+                    <h3>Prüfung durch Key Account Manager</h3>
+                    <div class="field-group">
+                        <label>Verwerfungsgrund (Pflicht bei Ablehnung):</label>
+                        <select id="action-verwerfungsgrund">
+                            <option value="">-- Grund wählen --</option>
+                            <option value="falsche Branche">falsche Branche</option>
+                            <option value="zu klein">zu klein</option>
+                            <option value="zu gross">zu gross</option>
+                            <option value="kein Bedarf">kein Bedarf</option>
+                            <option value="Bestandskunde">Bestandskunde</option>
+                            <option value="Wettbewerber">Wettbewerber</option>
+                            <option value="hat Abacus">hat Abacus</option>
+                            <option value="Kontakt fehlt">Kontakt fehlt</option>
+                            <option value="Sonstiges">Sonstiges</option>
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label>Kommentar / Notiz:</label>
+                        <input type="text" id="action-kommentar" placeholder="Optionale Bemerkung...">
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-green" onclick="submitFreigabe('${lead.lead_id}', 'ja')">Lead Freigeben</button>
+                        <button class="btn btn-primary" onclick="submitFreigabe('${lead.lead_id}', 'nein')">Lead Verwerfen</button>
+                    </div>
+                </div>
+                `;
+            } else if (lead.status === 'beobachten' || (lead.status === 'verworfen' && lead.klasse === 'C' && lead.freigabe !== 'nein')) {
+                actionHtml = `
+                <div class="action-card">
+                    <h3>Unter der Schwelle (Klasse ${esc(lead.klasse)}, Score ${lead.score})</h3>
+                    <p style="font-size: 13px; color: var(--text-muted); margin: 0 0 12px;">
+                        ${lead.klasse === 'B' ? 'Wiedervorlage und Neubewertung am ' + esc(lead.wiedervorlage_am || 'in 4 Wochen') + '.' : 'Dieser Lead wurde automatisch verworfen.'}
+                        Du kannst ihn trotzdem freigeben. Die Begründung hilft, das Scoring zu kalibrieren.
+                    </p>
+                    <div class="field-group">
+                        <label>Begründung (Pflicht):</label>
+                        <input type="text" id="action-begruendung" placeholder="Warum ist dieser Lead trotzdem interessant?">
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-green" onclick="submitFreigabe('${lead.lead_id}', 'ja', true)">Trotzdem freigeben</button>
+                    </div>
+                </div>
+                `;
+            } else if (lead.status === 'freigegeben') {
+                const mailDraftHtml = lead.mail_entwurf ? `
+                <div style="margin-top: 12px; background: white; border: 1px solid var(--border-color); border-radius: 5px; padding: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-weight: 700; font-size: 12px; text-transform: uppercase; color: var(--text-muted);">Vorbereiteter Mail-Entwurf</span>
+                        <button class="btn btn-outline" style="color: var(--brand-navy); border-color: var(--border-color); padding: 4px 8px; font-size: 11px;" onclick="copyDraft()">Kopieren</button>
+                    </div>
+                    <pre id="mail-draft-text" style="white-space: pre-wrap; font-size: 12px; color: #1e293b; background: var(--bg-page); padding: 10px; border-radius: 4px; border: 1px solid #e2e8f0;">${esc(lead.mail_entwurf)}</pre>
+                </div>
+                ` : '';
+
+                actionHtml = `
+                <div class="action-card" style="background: #f0fdf4; border-color: #bbf7d0;">
+                    <h3 style="color: #166534;">Freigegebener Lead</h3>
+                    <p style="font-size: 13px; color: #15803d; margin-bottom: 8px;">Entwurf kopieren, im eigenen Mailprogramm anpassen und versenden, dann hier als kontaktiert markieren. Nachfass-Mails folgen nach einer und nach zwei Wochen.</p>
+                    ${mailDraftHtml}
+                    <div style="margin-top: 12px;">
+                        <button class="btn btn-primary" onclick="markKontaktiert('${lead.lead_id}')">Als kontaktiert markieren</button>
+                    </div>
+                </div>
+                `;
+            } else if (lead.status === 'interesse') {
+                actionHtml = `
+                <div class="action-card" style="background: #f0fdf4; border-color: #bbf7d0;">
+                    <h3 style="color: #166534;">Interesse gemeldet</h3>
+                    <p style="font-size: 13px; color: #15803d;">Termin vereinbaren (Teams oder vor Ort). Danach geht der Lead in den normalen Sales-Cycle.</p>
+                    <div class="action-buttons"><button class="btn btn-green" onclick="submitAntwort('${lead.lead_id}', 'termin')">Termin vereinbart</button></div>
+                </div>`;
+            } else if (lead.status === 'termin') {
+                actionHtml = `
+                <div class="action-card" style="background: #f0fdf4; border-color: #bbf7d0;">
+                    <h3 style="color: #166534;">Termin vereinbart</h3>
+                    <p style="font-size: 13px; color: #15803d;">Die Akquise ist abgeschlossen. Weiter im Sales-Cycle: Bedarfsaufnahme, Offerte, Lead im Abacus Lead Management.</p>
+                </div>`;
+            } else if (lead.status === 'kontaktiert' || lead.status === 'nachgefasst_1' || lead.status === 'nachgefasst_2') {
+                const followupDraftHtml = lead.mail_entwurf ? `
+                <div style="margin-top: 12px; background: white; border: 1px solid var(--border-color); border-radius: 5px; padding: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-weight: 700; font-size: 12px; text-transform: uppercase; color: var(--text-muted);">Nachfass-Entwurf (Stufe ${lead.anzahl_nachfass})</span>
+                        <button class="btn btn-outline" style="color: var(--brand-navy); border-color: var(--border-color); padding: 4px 8px; font-size: 11px;" onclick="copyDraft()">Kopieren</button>
+                    </div>
+                    <pre id="mail-draft-text" style="white-space: pre-wrap; font-size: 12px; color: #1e293b; background: var(--bg-page); padding: 10px; border-radius: 4px; border: 1px solid #e2e8f0;">${esc(lead.mail_entwurf)}</pre>
+                </div>
+                ` : '';
+
+                actionHtml = `
+                <div class="action-card" style="background: #fefce8; border-color: #fef08a;">
+                    <h3 style="color: #854d0e;">Status: ${esc(lead.status)} (Kontaktiert am: ${esc(lead.kontaktiert_am || 'k.A.')}, Nachfass #${lead.anzahl_nachfass})</h3>
+                    <p style="font-size: 13px; color: #a16207; margin-bottom: 8px;">Rückmeldung vom Kunden erhalten?</p>
+                    ${followupDraftHtml}
+                    <div class="action-buttons" style="margin-top: 12px; flex-wrap: wrap;">
+                        <button class="btn btn-green" onclick="submitAntwort('${lead.lead_id}', 'termin')">Termin vereinbart</button>
+                        <button class="btn btn-green" style="background: #0d9488;" onclick="submitAntwort('${lead.lead_id}', 'interesse')">Interesse</button>
+                        <button class="btn btn-outline" style="color: var(--brand-navy); border-color: var(--border-color);" onclick="submitAntwort('${lead.lead_id}', 'spaeter')">Später interessant</button>
+                        <button class="btn btn-gray" onclick="submitAntwort('${lead.lead_id}', 'absage')">Absage</button>
+                    </div>
+                </div>
+                `;
+            }
+
+            pane.innerHTML = `
+                <div class="detail-header">
+                    <div>
+                        <h2>${esc(lead.firma)}</h2>
+                        <div class="meta-sub">
+                            ${lead.website ? `<a href="${esc(lead.website)}" target="_blank" style="color: #3b82f6;">${esc(lead.domain)}</a>` : 'Website offen'} |
+                            ${esc([lead.strasse, [lead.plz, lead.ort].filter(Boolean).join(' ')].filter(Boolean).join(', ') || 'Ort offen')} |
+                            <span style="font-weight: 600; color: #1e293b;">${esc(formatSegment(lead.segment))}</span> · ${formatKanal(lead.quelle_kanal)}
+                        </div>
+                    </div>
+                    <div>
+                        <span class="score-badge ${scoreClass}" style="font-size: 15px; padding: 6px 12px;">Score ${lead.score} (${lead.klasse})</span>
+                    </div>
+                </div>
+
+                <!-- Score & Potenzial -->
+                <div class="score-progress-box">
+                    <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 13px;">
+                        <span>Lead-Potenzial</span>
+                        <span>${lead.score} / 100 Punkte</span>
+                    </div>
+                    <div class="score-progress-bar">
+                        <div class="score-progress-fill" style="width: ${lead.score}%;"></div>
+                    </div>
+                    <p style="font-size: 13px; color: #334155; margin-top: 6px;">
+                        <strong>Begründung:</strong> ${esc(lead.begruendung)}
+                    </p>
+                </div>
+
+                <!-- Signal & Angebot -->
+                <div style="background: white; border: 1px solid var(--border-color); border-radius: 6px; padding: 12px;">
+                    <div class="section-title"><span>Signal</span><span style="text-transform: none; font-weight: 400;">${esc(lead.branche || '')}${lead.groesse ? ' · ' + esc(lead.groesse) : ''}</span></div>
+                    <div style="font-size: 13px; color: #334155; margin-bottom: 8px;">${esc(lead.kaufsignal || 'Kein Signal erfasst')}</div>
+                    <div class="section-title" style="margin-top: 10px;"><span>Vorgeschlagener Einstieg</span></div>
+                    <div style="font-size: 14px; font-weight: 700; color: var(--brand-accent);">${esc(lead.angebot || 'nach Bewertung')}</div>
+                </div>
+
+                ${lead.historie ? `
+                <div class="historie-box">
+                    <div class="section-title" style="color: #6d28d9;"><span>Historie aus der Adressliste</span></div>
+                    ${esc(lead.historie)}
+                </div>` : ''}
+
+                <!-- Ansprechperson -->
+                <div style="background: white; border: 1px solid var(--border-color); border-radius: 6px; padding: 12px;">
+                    <div class="section-title"><span>Ansprechperson</span></div>
+                    <table style="width: 100%; font-size: 13px;">
+                        <tr><td style="color: var(--text-muted); width: 100px;">Name:</td><td><strong>${esc(kontaktName)}</strong></td></tr>
+                        <tr><td style="color: var(--text-muted);">Rolle:</td><td>${esc(kontaktRolle)}</td></tr>
+                        <tr><td style="color: var(--text-muted);">E-Mail:</td><td>${kontaktEmail}</td></tr>
+                        <tr><td style="color: var(--text-muted);">Telefon:</td><td>${esc(kontaktTel)}</td></tr>
+                    </table>
+                </div>
+
+                <!-- Freigabe & Aktionen -->
+                ${actionHtml}
+
+                <!-- Teilscores & Belege -->
+                <div>
+                    <div class="section-title"><span>Teilscores pro Kriterium</span></div>
+                    <div class="criteria-list">
+                        ${criteriaHtml || '<p style="color: var(--text-muted); font-size: 12px;">Keine Teilscores erfasst.</p>'}
+                    </div>
+                </div>
+
+                <!-- Quellen -->
+                <div>
+                    <div class="section-title"><span>Quellen & Nachweise</span></div>
+                    <ul style="font-size: 12px; padding-left: 20px;">
+                        ${quellenHtml || '<li style="color: var(--text-muted);">Keine Quellen erfasst</li>'}
+                    </ul>
+                </div>
+
+                <!-- Audit Meta -->
+                <div style="font-size: 11px; color: var(--text-muted); border-top: 1px solid var(--border-color); padding-top: 10px;">
+                    Lead-ID: ${esc(lead.lead_id)} | Modellversion: ${esc(lead.modell_version)} | Erstellt: ${esc((lead.erstellt_am || '').slice(0, 16))}${lead.import_datei ? ' | Import: ' + esc(lead.import_datei) : ''}
+                </div>
+
+                <!-- Löschoption -->
+                <div style="margin-top: 15px; padding-top: 12px; border-top: 1px dashed var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 12px; color: var(--text-muted);">Lead unpassend oder irrelevant?</span>
+                    <button class="btn btn-outline" style="color: #ef4444; border-color: #fca5a5; background: #fff5f5; font-size: 12px; padding: 5px 12px;" onclick="deleteLead('${esc(lead.lead_id)}')">
+                        🗑️ Lead löschen
+                    </button>
+                </div>
+            `;
+        }
+
+        function copyDraft() {
+            const pre = document.getElementById('mail-draft-text');
+            if (pre) {
+                navigator.clipboard.writeText(pre.innerText).then(() => {
+                    alert('Mail-Entwurf in die Zwischenablage kopiert!');
+                }).catch(() => {
+                    alert('Kopieren fehlgeschlagen. Bitte manuell markieren.');
+                });
+            }
+        }
+
+        async function submitFreigabe(leadId, entscheid, unterSchwelle = false) {
+            const grund = document.getElementById('action-verwerfungsgrund') ? document.getElementById('action-verwerfungsgrund').value : null;
+            const kommentar = document.getElementById('action-kommentar') ? document.getElementById('action-kommentar').value : null;
+            const begruendung = document.getElementById('action-begruendung') ? document.getElementById('action-begruendung').value.trim() : null;
+
+            if (unterSchwelle && !begruendung) {
+                alert('Bitte geben Sie eine Begründung für die Freigabe an.');
+                return;
+            }
+
+            if (entscheid === 'nein' && !grund) {
+                alert('Bitte wählen Sie zwingend einen Verwerfungsgrund aus.');
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/leads/${leadId}/freigabe`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ entscheid, grund, kommentar, begruendung })
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    alert('Fehler: ' + err.detail);
+                    return;
+                }
+
+                await loadKPIs();
+                await loadLeads();
+                selectLead(leadId);
+            } catch (e) {
+                alert('Netzwerkfehler beim Speichern der Freigabe.');
+            }
+        }
+
+        async function markKontaktiert(leadId) {
+            try {
+                await fetch(`/api/leads/${leadId}/kontaktiert`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                await loadKPIs();
+                await loadLeads();
+                selectLead(leadId);
+            } catch (e) {
+                alert('Fehler beim Aktualisieren des Kontaktstatus.');
+            }
+        }
+
+        async function submitAntwort(leadId, antwort) {
+            try {
+                await fetch(`/api/leads/${leadId}/antwort`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ antwort })
+                });
+                await loadKPIs();
+                await loadLeads();
+                selectLead(leadId);
+            } catch (e) {
+                alert('Fehler beim Speichern der Kundenantwort.');
+            }
+        }
+
+        function exportCSV() {
+            window.location.href = '/api/export.csv';
+        }
+
+        async function deleteLead(leadId) {
+            if (!confirm('Möchten Sie diesen Lead wirklich löschen?\n\nEr wird aus der Übersicht entfernt und als verworfen markiert, damit die Websuche ihn nicht erneut vorschlägt.')) {
+                return;
+            }
+            try {
+                const res = await fetch(`/api/leads/${leadId}`, {
+                    method: 'DELETE'
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    alert('Fehler beim Löschen: ' + (err.detail || 'Unbekannter Fehler'));
+                    return;
+                }
+                if (selectedLeadId === leadId) {
+                    selectedLeadId = null;
+                    document.getElementById('detail-pane').innerHTML = `
+                        <div style="text-align: center; padding: 60px 20px; color: var(--text-muted);">
+                            Lead gelöscht. Wähle einen anderen Lead aus der Tabelle aus.
+                        </div>
+                    `;
+                }
+                await loadKPIs();
+                await loadLeads();
+            } catch (e) {
+                alert('Netzwerkfehler beim Löschen des Leads.');
+            }
+        }
+
+        async function triggerRun() {
+            const btn = document.getElementById('run-btn');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerText = 'Starte Lauf...';
+            }
+            try {
+                const res = await fetch('/api/runs', { method: 'POST' });
+                const data = await res.json();
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerText = 'Lauf starten';
+                }
+                alert(data.message || 'Lauf gestartet.');
+                if (data.actions_url && data.mode !== 'local') { window.open(data.actions_url, '_blank'); }
+                setTimeout(loadKPIs, 3000);
+            } catch (e) {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerText = 'Lauf starten';
+                }
+                alert('Fehler beim Starten des Laufs.');
+            }
+        }
+
+        // ---------------------------------------------------------------- Import
+        function openImport() {
+            importFile = null;
+            document.getElementById('import-preview').innerHTML = '';
+            document.getElementById('import-confirm').style.display = 'none';
+            document.getElementById('dropzone-text').innerText = 'Datei hierher ziehen oder klicken, um sie auszuwählen';
+            document.getElementById('import-modal').classList.add('open');
+        }
+
+        function closeImport() {
+            document.getElementById('import-modal').classList.remove('open');
+            document.getElementById('import-file').value = '';
+        }
+
+        function readAsBase64(file) {
+            return new Promise((resolve, reject) => {
+                const r = new FileReader();
+                r.onload = () => resolve(String(r.result));
+                r.onerror = reject;
+                r.readAsDataURL(file);
+            });
+        }
+
+        async function previewImport(file) {
+            if (!file) return;
+            const box = document.getElementById('import-preview');
+            document.getElementById('dropzone-text').innerText = file.name;
+            box.innerHTML = '<p class="hint" style="margin-top: 12px;">Lese Datei...</p>';
+            try {
+                const inhalt = await readAsBase64(file);
+                importFile = { dateiname: file.name, inhalt_base64: inhalt };
+                const res = await fetch('/api/import/vorschau', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(importFile)
+                });
+                const data = await res.json();
+                if (!res.ok) { throw new Error(data.detail || 'Datei nicht lesbar'); }
+                const e = data.ergebnis;
+                const zuordnung = Object.entries(e.spalten).map(([feld, spalten]) =>
+                    `<tr><td>${esc(FELDNAMEN[feld] || feld)}</td><td>${esc(spalten.join(', '))}</td></tr>`).join('');
+                const beispiele = data.beispiele.map(b =>
+                    `<tr><td>${esc(b.firma)}</td><td>${esc(b.website || '–')}</td><td>${esc(b.ort || '')}</td><td>${esc(b.kontakt_name || '')}</td></tr>`).join('');
+                box.innerHTML = `
+                    <div class="result-ok">${data.firmen} Firmen erkannt aus ${e.zeilen_gelesen} Zeilen
+                        ${e.ohne_website ? ' · ' + e.ohne_website + ' ohne Website (wird gesucht)' : ''}
+                        ${e.durchgestrichen ? ' · ' + e.durchgestrichen + ' durchgestrichen' : ''}
+                        ${e.ohne_firma ? ' · ' + e.ohne_firma + ' Zeile(n) ohne Firmennamen übersprungen' : ''}</div>
+                    <div class="section-title" style="margin-top: 14px;"><span>Spaltenzuordnung</span></div>
+                    <table class="mini"><tr><th>Feld</th><th>Spalte in der Datei</th></tr>${zuordnung}</table>
+                    ${e.nicht_zugeordnet.length ? `<p class="hint" style="margin-top: 6px;">Nicht verwendet: ${esc(e.nicht_zugeordnet.join(', '))}</p>` : ''}
+                    <div class="section-title" style="margin-top: 14px;"><span>Erste Einträge</span></div>
+                    <table class="mini"><tr><th>Firma</th><th>Website</th><th>Ort</th><th>Kontakt</th></tr>${beispiele}</table>`;
+                document.getElementById('import-confirm').style.display = 'inline-flex';
+            } catch (err) {
+                importFile = null;
+                box.innerHTML = `<div class="result-err">${esc(err.message)}</div>`;
+                document.getElementById('import-confirm').style.display = 'none';
+            }
+        }
+
+        async function confirmImport() {
+            if (!importFile) return;
+            const btn = document.getElementById('import-confirm');
+            btn.disabled = true;
+            btn.innerText = 'Importiere...';
+            const box = document.getElementById('import-preview');
+            try {
+                const res = await fetch('/api/import', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(importFile)
+                });
+                const data = await res.json();
+                if (!res.ok) { throw new Error(data.detail || 'Import fehlgeschlagen'); }
+                const e = data.ergebnis;
+                box.innerHTML = `<div class="result-ok">Import abgeschlossen: ${e.neu} neue Firmen, ${e.aktualisiert} bestehende ergänzt${e.ausgeschlossen ? ', ' + e.ausgeschlossen + ' auf der Ausschlussliste übersprungen' : ''}.
+                    Die Bewertung erfolgt im nächsten Lauf (Button «Lauf starten»).</div>`;
+                btn.style.display = 'none';
+                importFile = null;
+                document.getElementById('filter-status').value = 'zu bewerten';
+                await loadKPIs();
+                await loadLeads();
+            } catch (err) {
+                box.insertAdjacentHTML('beforeend', `<div class="result-err">${esc(err.message)}</div>`);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = 'Importieren';
+            }
+        }
+
+        const dz = document.getElementById('dropzone');
+        ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('drag'); }));
+        ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('drag'); }));
+        dz.addEventListener('drop', e => { if (e.dataTransfer.files.length) previewImport(e.dataTransfer.files[0]); });
+
+        window.onload = init;
+    </script>
+</body>
+</html>

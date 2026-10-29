@@ -1,0 +1,34 @@
+# Environments and Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.installed.cfg
+*.egg
+build/
+dist/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local Data / Excel
+data/*.xlsx
+!data/.gitkeep
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+
+# Start scripts
+*.bat
+
+# Vercel
+.vercel/

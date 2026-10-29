@@ -1,0 +1,22 @@
+storage:
+  type: "excel"
+  excel_path: "data/projekt7_Leads.xlsx"
+
+pipeline:
+  kandidaten_pro_lauf: 40          # neue Firmen aus der KI-Websuche
+  import_bewertungen_pro_lauf: 60  # importierte Adressen, die pro Lauf recherchiert werden
+  a_leads_pro_woche: 8
+  max_seiten_pro_firma: 5
+  b_lead_wiedervorlage_tage: 28
+
+nachfass:
+  # Interview: Erstmail, nach 1 Woche Nachfass 1, nach einer weiteren Woche Nachfass 2
+  werktage_bis_nachfass: 5
+  max_nachfass: 2
+
+digest:
+  empfaenger: "vertrieb@projektsieben.ch"
+  cc: ""
+
+logging:
+  level: "INFO"

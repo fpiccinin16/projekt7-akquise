@@ -1,0 +1,36 @@
+# Segmentdefinitionen projekt7 – Team Produktion und Handel
+segmente:
+  A:
+    name: "Produktion"
+    beschreibung: "Produzierende KMU (Fertigung, Maschinenbau, Lebensmittel, Bau-Zulieferer)"
+    zielrollen: ["Geschäftsführer", "Inhaber", "Leiter Finanzen", "Leiter Operations"]
+    suchbegriffe:
+      - "Produktionsunternehmen KMU St. Gallen Mitarbeitende"
+      - "Maschinenbau KMU Thurgau"
+      - "Metallverarbeitung Firma Appenzell Rheintal"
+      - "Kunststofftechnik KMU Ostschweiz"
+      - "Lebensmittelproduktion KMU Ostschweiz"
+      - "Fertigung Elektrotechnik KMU Graubünden"
+      - "Holzverarbeitung Schreinerei Industrie Ostschweiz"
+      - "Produktionsbetrieb Zürich Oberland KMU"
+  B:
+    name: "Handel"
+    beschreibung: "Gross- und Fachhandel, B2B-Handel, Import/Export"
+    zielrollen: ["Geschäftsführer", "Inhaber", "Leiter Finanzen", "Leiter Operations"]
+    suchbegriffe:
+      - "Grosshandel KMU St. Gallen"
+      - "Fachhandel B2B Thurgau"
+      - "Import Export Handelsfirma Ostschweiz"
+      - "Technischer Handel Schweiz KMU Ostschweiz"
+      - "Baustoffhandel Ostschweiz"
+      - "Elektro Grosshandel Deutschschweiz KMU"
+  C:
+    name: "Andere Branche"
+    beschreibung: "Nicht Zielsegment (z. B. reine Dienstleister) – nur aus importierten Listen"
+    zielrollen: []
+    suchbegriffe: []
+
+# Kantone der Zielregion (für Prompt und Regionszuordnung)
+region:
+  ostschweiz: [SG, TG, AR, AI, GR, GL, SH]
+  deutschschweiz: [ZH, LU, ZG, SZ, UR, OW, NW, AG, BE, SO, BL, BS]

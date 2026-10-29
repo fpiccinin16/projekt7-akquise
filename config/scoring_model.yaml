@@ -1,0 +1,35 @@
+# Scoring-Modell projekt7 AG – Neukundenakquise Team Produktion und Handel
+# Zielprofil aus dem Interview (LeadRise-Kampagne): Produktions- und Handelsunternehmen,
+# Ost- bzw. Deutschschweiz, deutschsprachig, 20 bis 100 Mitarbeitende,
+# Ansprechperson Geschäftsführung / Inhaber / Leitung Finanzen / Leitung Operations.
+version: "1.0.0"
+gueltig_ab: "2026-11-02"
+freigegeben_durch: "ENTWURF – Freigabe durch projekt7 ausstehend"
+schwellen: { A: 70, B: 50 }
+ko_kriterien: [bestandskunde, wettbewerber, ausserhalb_zielregion]
+kriterien:
+  fit:
+    segment_produktion_handel: { punkte: 20 }
+    groesse_20_100:            { punkte: 15, min_mitarbeitende: 20, max_mitarbeitende: 100 }
+    region:                    { punkte: { Ostschweiz: 10, Deutschschweiz: 7, andere: 0 } }
+    deutschsprachig:           { punkte: 5 }
+  bedarf:
+    erp_signal:                { punkte: 15 }   # ERP-/Software-Ablösung, Stelle ERP/Informatik, veraltete Insellösungen
+    wachstum_signal:           { punkte: 10 }   # Expansion, neuer Standort, Übernahme, Nachfolge, viele offene Stellen
+    prozesskomplexitaet:       { punkte: 10 }   # Lager, Produktion, Varianten, mehrere Standorte, Onlineshop/B2B-Handel
+  erreichbarkeit:
+    ansprechperson_zielrolle:  { punkte: 10 }   # GF, Inhaber, Leitung Finanzen, Leitung Operations
+    direkter_kontaktweg:       { punkte: 5 }
+labels:
+  segment_produktion_handel: "Produktions- oder Handelsunternehmen"
+  groesse_20_100: "Grösse 20–100 Mitarbeitende"
+  region: "Zielregion Ost-/Deutschschweiz"
+  deutschsprachig: "deutschsprachig"
+  erp_signal: "ERP-/Software-Signal"
+  wachstum_signal: "Wachstumssignal"
+  prozesskomplexitaet: "komplexe Abläufe (Lager, Produktion, Standorte)"
+  ansprechperson_zielrolle: "Ansprechperson in Zielrolle"
+  direkter_kontaktweg: "direkter Kontaktweg"
+  bestandskunde: "Bestandskunde"
+  wettbewerber: "Wettbewerber"
+  ausserhalb_zielregion: "ausserhalb Zielregion"

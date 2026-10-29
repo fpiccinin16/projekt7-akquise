@@ -1,0 +1,37 @@
+[project]
+name = "projekt7-akquise"
+version = "0.1.0"
+description = "KI-gestützte Leadgenerierung und Scoring für projekt7 AG (Team Produktion und Handel)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.7.0",
+    "openpyxl>=3.1.2",
+    "pyyaml>=6.0.1",
+    "anthropic>=0.30.0",
+    "vercel>=0.12.0",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.28.0",
+    "requests>=2.31.0",
+    "python-dotenv>=1.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "httpx>=0.27.0",
+    "firecrawl-py>=1.0.0",
+    "google-genai>=0.1.0",
+    "pytest-cov>=4.1.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
