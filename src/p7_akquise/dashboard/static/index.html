@@ -1107,7 +1107,6 @@
                     btn.innerText = 'Lauf starten';
                 }
                 alert(data.message || 'Lauf gestartet.');
-                if (data.actions_url && data.mode !== 'local') { window.open(data.actions_url, '_blank'); }
                 setTimeout(loadKPIs, 3000);
             } catch (e) {
                 if (btn) {
