@@ -163,7 +163,7 @@ class AkquisePipeline:
 
         # 3. Neue Firmen per Websuche
         logger.info("Schritt 3: Suche neue Zielfirmen (max. %d)...", self.kandidaten_pro_lauf)
-        discoverer = CandidateDiscoverer(firecrawl_client=self.firecrawl, max_candidates=self.kandidaten_pro_lauf)
+        discoverer = CandidateDiscoverer(firecrawl_client=self.firecrawl, max_candidates=self.kandidaten_pro_lauf, store=self.store)
         discovery_res = discoverer.discover_all(max_candidates=self.kandidaten_pro_lauf)
 
         # 4. Abgleich
@@ -187,6 +187,8 @@ class AkquisePipeline:
         saved = 0
         if not self.dry_run:
             saved = self.store.upsert_leads(web_leads) + anzahl_import
+            if hasattr(self.store, "record_search_queries") and discovery_res.used_queries:
+                self.store.record_search_queries(discovery_res.used_queries, lauf_id=lauf_id, datum=ref_date.isoformat())
             self.store.add_protocol_entry(ProtocolEntry(
                 lauf_id=lauf_id,
                 modell_version=self.scoring_engine.version,

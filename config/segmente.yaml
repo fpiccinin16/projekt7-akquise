@@ -4,31 +4,44 @@ segmente:
     name: "Produktion"
     beschreibung: "Produzierende KMU (Fertigung, Maschinenbau, Lebensmittel, Bau-Zulieferer)"
     zielrollen: ["Geschäftsführer", "Inhaber", "Leiter Finanzen", "Leiter Operations"]
-    suchbegriffe:
-      - "Produktionsunternehmen KMU St. Gallen Mitarbeitende"
-      - "Maschinenbau KMU Thurgau"
-      - "Metallverarbeitung Firma Appenzell Rheintal"
-      - "Kunststofftechnik KMU Ostschweiz"
-      - "Lebensmittelproduktion KMU Ostschweiz"
-      - "Fertigung Elektrotechnik KMU Graubünden"
-      - "Holzverarbeitung Schreinerei Industrie Ostschweiz"
-      - "Produktionsbetrieb Zürich Oberland KMU"
+    branchen:
+      - "Maschinenbau"
+      - "Metallbau"
+      - "Kunststofftechnik"
+      - "Elektrotechnik"
+      - "Lebensmittel"
+      - "Holzverarbeitung"
+      - "Medizintechnik"
+      - "Verpackung"
+      - "Feinmechanik"
+    suchbegriffe: []
   B:
     name: "Handel"
     beschreibung: "Gross- und Fachhandel, B2B-Handel, Import/Export"
     zielrollen: ["Geschäftsführer", "Inhaber", "Leiter Finanzen", "Leiter Operations"]
-    suchbegriffe:
-      - "Grosshandel KMU St. Gallen"
-      - "Fachhandel B2B Thurgau"
-      - "Import Export Handelsfirma Ostschweiz"
-      - "Technischer Handel Schweiz KMU Ostschweiz"
-      - "Baustoffhandel Ostschweiz"
-      - "Elektro Grosshandel Deutschschweiz KMU"
+    branchen:
+      - "Grosshandel"
+      - "Fachhandel"
+      - "technischer Handel"
+      - "Baustoffhandel"
+      - "Import Export"
+      - "Ersatzteilhandel"
+    suchbegriffe: []
   C:
     name: "Andere Branche"
     beschreibung: "Nicht Zielsegment (z. B. reine Dienstleister) – nur aus importierten Listen"
     zielrollen: []
     suchbegriffe: []
+
+# Kantone für die Kombination Branche × Kanton (SG, TG, AR, AI, GR, GL, SH, ZH)
+kantone_suche: ["SG", "TG", "AR", "AI", "GR", "GL", "SH", "ZH"]
+
+# Zusätzliche Signal-Suchen
+signal_suchen:
+  - "Stellenausschreibung ERP KMU Ostschweiz"
+  - "neuer Standort Produktion Ostschweiz"
+  - "Nachfolgeregelung KMU Ostschweiz"
+  - "Firmenübernahme Ostschweiz"
 
 # Kantone der Zielregion (für Prompt und Regionszuordnung)
 region:

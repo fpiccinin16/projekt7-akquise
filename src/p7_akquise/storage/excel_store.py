@@ -101,6 +101,13 @@ VERWORFEN_COLUMNS = [
     ("verworfen_am", "Verworfen am", 18),
 ]
 
+SUCHBEGRIFFE_COLUMNS = [
+    ("suchbegriff", "Suchbegriff", 35),
+    ("letzter_lauf_id", "Letzter Lauf-ID", 36),
+    ("zuletzt_verwendet_am", "Zuletzt verwendet am", 22),
+    ("anzahl_verwendungen", "Anzahl Verwendungen", 18),
+]
+
 # Farben Kopfzeile
 HEADER_FILL = PatternFill(start_color="1F2A44", end_color="1F2A44", fill_type="solid")
 HEADER_FONT = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
@@ -178,12 +185,14 @@ class ExcelStore(LeadStore):
         ws_ausschluss = wb.create_sheet(title="Ausschluss")
         ws_protokoll = wb.create_sheet(title="Protokoll")
         ws_verworfen = wb.create_sheet(title="Verworfen")
+        ws_suchbegriffe = wb.create_sheet(title="Suchbegriffe")
 
         # Header schreiben und formatieren
         self._setup_sheet_headers(ws_leads, LEADS_COLUMNS)
         self._setup_sheet_headers(ws_ausschluss, AUSSCHLUSS_COLUMNS)
         self._setup_sheet_headers(ws_protokoll, PROTOKOLL_COLUMNS)
         self._setup_sheet_headers(ws_verworfen, VERWORFEN_COLUMNS)
+        self._setup_sheet_headers(ws_suchbegriffe, SUCHBEGRIFFE_COLUMNS)
 
         # Datenvalidierung (Dropdowns) auf Blatt 'Leads' einrichten
         self._setup_data_validation(ws_leads)
@@ -541,6 +550,69 @@ class ExcelStore(LeadStore):
 
         wb.close()
         return entries
+
+    def _ensure_suchbegriffe_sheet(self, wb: openpyxl.Workbook) -> Any:
+        if "Suchbegriffe" not in wb.sheetnames:
+            ws = wb.create_sheet(title="Suchbegriffe")
+            self._setup_sheet_headers(ws, SUCHBEGRIFFE_COLUMNS)
+            return ws
+        return wb["Suchbegriffe"]
+
+    def record_search_queries(self, queries: list[str], lauf_id: str, datum: str | None = None) -> None:
+        """Speichert verwendete Suchbegriffe mit Datum für die Rotation."""
+        if not queries:
+            return
+        dt = datum or datetime.now(timezone.utc).isoformat()
+        wb = self._load_workbook()
+        ws = self._ensure_suchbegriffe_sheet(wb)
+
+        # Vorhandene Begriffe einlesen
+        row_map: dict[str, int] = {}
+        for row_idx in range(2, ws.max_row + 1):
+            val = ws.cell(row=row_idx, column=1).value
+            if val:
+                row_map[str(val).strip()] = row_idx
+
+        for q in queries:
+            q_clean = q.strip()
+            if not q_clean:
+                continue
+            if q_clean in row_map:
+                r = row_map[q_clean]
+                ws.cell(row=r, column=2, value=lauf_id)
+                ws.cell(row=r, column=3, value=dt)
+                current_cnt = ws.cell(row=r, column=4).value or 0
+                try:
+                    current_cnt = int(current_cnt)
+                except Exception:
+                    current_cnt = 0
+                ws.cell(row=r, column=4, value=current_cnt + 1)
+            else:
+                target_row = ws.max_row + 1
+                ws.cell(row=target_row, column=1, value=q_clean)
+                ws.cell(row=target_row, column=2, value=lauf_id)
+                ws.cell(row=target_row, column=3, value=dt)
+                ws.cell(row=target_row, column=4, value=1)
+                row_map[q_clean] = target_row
+
+        self._save(wb)
+        wb.close()
+
+    def get_used_search_queries(self) -> dict[str, str]:
+        """Gibt {suchbegriff: letztes_datum_iso} zurück."""
+        wb = self._load_workbook()
+        if "Suchbegriffe" not in wb.sheetnames:
+            wb.close()
+            return {}
+        ws = wb["Suchbegriffe"]
+        out: dict[str, str] = {}
+        for row_idx in range(2, ws.max_row + 1):
+            term = ws.cell(row=row_idx, column=1).value
+            dt = ws.cell(row=row_idx, column=3).value
+            if term:
+                out[str(term).strip()] = str(dt or "")
+        wb.close()
+        return out
 
     def add_rejected_lead(self, rejected: RejectedLead) -> None:
         """Fügt einen Lead ins Blatt 'Verworfen' ein."""

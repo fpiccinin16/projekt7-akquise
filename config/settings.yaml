@@ -3,10 +3,10 @@ storage:
   excel_path: "data/projekt7_Leads.xlsx"
 
 pipeline:
-  kandidaten_pro_lauf: 40          # neue Firmen aus der KI-Websuche
+  kandidaten_pro_lauf: 100         # neue Firmen aus der KI-Websuche
   import_bewertungen_pro_lauf: 60  # importierte Adressen, die pro Lauf recherchiert werden
   a_leads_pro_woche: 8
-  max_seiten_pro_firma: 5
+  max_seiten_pro_firma: 8
   b_lead_wiedervorlage_tage: 28
 
 nachfass:

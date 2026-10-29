@@ -61,6 +61,14 @@ class LeadStore(ABC):
         """Liest alle Lauf-Protokolleinträge ein."""
         pass
 
+    def record_search_queries(self, queries: list[str], lauf_id: str, datum: str | None = None) -> None:
+        """Speichert verwendete Suchbegriffe mit Datum für die Rotation."""
+        pass
+
+    def get_used_search_queries(self) -> dict[str, str]:
+        """Gibt {suchbegriff: letztes_datum_iso} zurück."""
+        return {}
+
     @abstractmethod
     def add_rejected_lead(self, rejected: RejectedLead) -> None:
         """Fügt einen verworfenen Lead zur Liste hinzu."""

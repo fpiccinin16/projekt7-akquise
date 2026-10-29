@@ -32,3 +32,6 @@ ENV/
 
 # Vercel
 .vercel/
+
+.vercel
+.env*

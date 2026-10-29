@@ -14,10 +14,10 @@ CONFIG_DIR = BASE_DIR / "config"
 DEFAULTS: dict[str, Any] = {
     "storage": {"type": "excel", "excel_path": "data/projekt7_Leads.xlsx"},
     "pipeline": {
-        "kandidaten_pro_lauf": 40,
+        "kandidaten_pro_lauf": 100,
         "import_bewertungen_pro_lauf": 60,
         "a_leads_pro_woche": 8,
-        "max_seiten_pro_firma": 5,
+        "max_seiten_pro_firma": 8,
         "b_lead_wiedervorlage_tage": 28,
     },
     "nachfass": {"werktage_bis_nachfass": 5, "max_nachfass": 2},

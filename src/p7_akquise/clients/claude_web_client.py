@@ -141,7 +141,7 @@ class ClaudeWebClient:
             return {"markdown": "", "metadata": {}, "url": url, "error": content.get("error_code", "fetch_error")}
         return {"markdown": "", "metadata": {}, "url": url, "error": "kein Abrufergebnis"}
 
-    def find_companies(self, query: str, max_items: int = 10) -> list[dict[str, str]]:
+    def find_companies(self, query: str, max_items: int = 20) -> list[dict[str, str]]:
         """Websuche nach Zielfirmen. Gibt [{firma, website, ort}] konkreter Unternehmen zurück."""
         self.call_count += 1
         self.search_count += 1
@@ -156,7 +156,7 @@ class ClaudeWebClient:
             '[{"firma": "…", "website": "https://…", "ort": "…"}]'
         )
         blocks = self._create(
-            tools=[{"type": WEB_SEARCH_TOOL, "name": "web_search", "max_uses": 2,
+            tools=[{"type": WEB_SEARCH_TOOL, "name": "web_search", "max_uses": 5,
                     "user_location": {"type": "approximate", "country": "CH"}}],
             prompt=prompt,
             max_tokens=2000,
