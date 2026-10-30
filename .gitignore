@@ -21,6 +21,7 @@ htmlcov/
 # Local Data / Excel
 data/*.xlsx
 !data/.gitkeep
+*.xlsx
 
 # Virtual Environment
 .venv/

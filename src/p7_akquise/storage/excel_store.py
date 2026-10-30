@@ -213,7 +213,9 @@ class ExcelStore(LeadStore):
         # Datenvalidierung (Dropdowns) auf Blatt 'Leads' einrichten
         self._setup_data_validation(ws_leads)
 
-        self._save(wb)
+        # WICHTIG: upload_blob=False, damit ein neu initialisiertes leeres Dokument
+        # niemals den Vercel-Blob-Speicher überschreibt!
+        self._save(wb, upload_blob=False)
         wb.close()
 
     def _setup_sheet_headers(self, ws: Any, col_defs: list[tuple[str, str, int]]) -> None:
@@ -265,9 +267,9 @@ class ExcelStore(LeadStore):
         ws.add_data_validation(dv_grund)
         dv_grund.add(f"{grund_col_letter}2:{grund_col_letter}1000")
 
-    def _save(self, wb: openpyxl.Workbook) -> None:
+    def _save(self, wb: openpyxl.Workbook, upload_blob: bool = True) -> None:
         wb.save(self.file_path)
-        if getattr(self, "_blob", False):
+        if upload_blob and getattr(self, "_blob", False):
             from p7_akquise.storage import blob_sync
             blob_sync.upload(self.file_path)
 
@@ -296,8 +298,10 @@ class ExcelStore(LeadStore):
                     recovered = True
                     break
             if not recovered:
-                self.file_path.unlink(missing_ok=True)
-                self.init_store()
+                # Keinesfalls leeres Dokument in Blob hochladen!
+                wb = openpyxl.Workbook()
+                self._setup_sheet_headers(wb.active, LEADS_COLUMNS)
+                return wb
             wb = openpyxl.load_workbook(self.file_path)
 
         # Bestehende Dateien um neu hinzugekommene Spalten ergänzen (Kopfzeile)

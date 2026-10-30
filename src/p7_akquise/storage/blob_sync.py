@@ -16,12 +16,16 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from pathlib import Path
 
 logger = logging.getLogger("p7_akquise.blob")
 
 PREFIX = os.getenv("BLOB_PREFIX", "leads/projekt7_Leads")
 KEEP_VERSIONS = 10
+
+_BLOB_LOCK = threading.Lock()
+_CURRENT_BLOB_URL: str | None = None
 
 
 def blob_enabled() -> bool:
@@ -42,46 +46,66 @@ def _versions():
 
 
 def download_latest(target: Path) -> bool:
-    """Lädt die neueste Version nach `target`. Gibt False zurück, wenn noch keine existiert."""
-    try:
-        from vercel.blob import sync
-        versions = _versions()
-        if not versions:
-            logger.info("Noch keine Lead-Datei im Blob-Speicher.")
-            return False
-        latest = versions[0]
-        result = sync.get_blob(latest.url, access=_access())
-        body = getattr(result, "body", None)
-        if body is None and hasattr(result, "read"):
-            body = result.read()
-        elif body is None and isinstance(result, (bytes, bytearray)):
-            body = bytes(result)
+    """Lädt die neueste gültige Version nach `target`. Gibt False zurück, wenn noch keine existiert."""
+    global _CURRENT_BLOB_URL
+    with _BLOB_LOCK:
+        try:
+            from vercel.blob import sync
+            versions = _versions()
+            if not versions:
+                logger.info("Noch keine Lead-Datei im Blob-Speicher.")
+                return False
 
-        if not body or len(body) < 100 or not body.startswith(b"PK"):
-            logger.warning("Heruntergeladene Datei ist kein gültiges Excel-Archiv (%s Bytes). Überspringe.", len(body) if body else 0)
-            return False
+            # Suche die neueste Version, die nicht leer/beschädigt ist
+            for candidate in versions:
+                # Leere Vorlagen haben ca. 9 KB. Echtes Dokument hat > 20 KB.
+                if candidate.size < 20000 and len(versions) > 1 and any(v.size >= 20000 for v in versions):
+                    continue
 
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(body)
-        return True
-    except Exception as e:
-        logger.warning("Fehler beim Herunterladen aus Blob: %s", e)
-        return False
+                if target.exists() and _CURRENT_BLOB_URL == candidate.url:
+                    return True
+
+                result = sync.get_blob(candidate.url, access=_access())
+                body = getattr(result, "body", None)
+                if body is None and hasattr(result, "read"):
+                    body = result.read()
+                elif body is None and isinstance(result, (bytes, bytearray)):
+                    body = bytes(result)
+
+                if not body or len(body) < 100 or not body.startswith(b"PK"):
+                    logger.warning("Version %s ist kein gültiges Excel-Archiv (%s Bytes). Überspringe.", candidate.pathname, len(body) if body else 0)
+                    continue
+
+                target.parent.mkdir(parents=True, exist_ok=True)
+                tmp_target = target.with_name(f"{target.name}.{os.getpid()}.tmp")
+                tmp_target.write_bytes(body)
+                os.replace(tmp_target, target)
+                _CURRENT_BLOB_URL = candidate.url
+                return True
+
+            return False
+        except Exception as e:
+            logger.warning("Fehler beim Herunterladen aus Blob: %s", e)
+            return False
 
 
 def upload(source: Path) -> None:
-    from vercel.blob import sync
-    data = source.read_bytes()
-    sync.put_blob(
-        f"{PREFIX}.xlsx",
-        data,
-        access=_access(),
-        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        add_random_suffix=True,
-    )
-    try:
-        old = _versions()[KEEP_VERSIONS:]
-        if old:
-            sync.delete_blob([b.url for b in old])
-    except Exception as e:  # Aufräumen ist nicht kritisch
-        logger.warning("Alte Blob-Versionen nicht gelöscht: %s", e)
+    global _CURRENT_BLOB_URL
+    with _BLOB_LOCK:
+        from vercel.blob import sync
+        data = source.read_bytes()
+        res = sync.put_blob(
+            f"{PREFIX}.xlsx",
+            data,
+            access=_access(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            add_random_suffix=True,
+        )
+        if hasattr(res, "url"):
+            _CURRENT_BLOB_URL = res.url
+        try:
+            old = _versions()[KEEP_VERSIONS:]
+            if old:
+                sync.delete_blob([b.url for b in old])
+        except Exception as e:  # Aufräumen ist nicht kritisch
+            logger.warning("Alte Blob-Versionen nicht gelöscht: %s", e)
