@@ -22,6 +22,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from p7_akquise.models import (
+    AenderungEntry,
     ExclusionEntry,
     Lead,
     ProtocolEntry,
@@ -71,6 +72,8 @@ LEADS_COLUMNS = [
     ("erstellt_am", "Erstellt am", 20),
     ("aktualisiert_am", "Aktualisiert am", 20),
     ("manuelle_freigabe", "Manuelle Freigabe (trotz Score)", 18),
+    ("gesperrte_felder", "Gesperrte Felder", 25),
+    ("score_manuell", "Score manuell", 14),
 ]
 
 AUSSCHLUSS_COLUMNS = [
@@ -106,6 +109,17 @@ SUCHBEGRIFFE_COLUMNS = [
     ("letzter_lauf_id", "Letzter Lauf-ID", 36),
     ("zuletzt_verwendet_am", "Zuletzt verwendet am", 22),
     ("anzahl_verwendungen", "Anzahl Verwendungen", 18),
+]
+
+AENDERUNGEN_COLUMNS = [
+    ("lead_id", "Lead ID", 36),
+    ("firma", "Unternehmen", 28),
+    ("feld", "Feld", 20),
+    ("alt", "Alter Wert", 25),
+    ("neu", "Neuer Wert", 25),
+    ("benutzer", "Benutzer", 16),
+    ("zeitpunkt", "Zeitpunkt", 22),
+    ("grund", "Grund", 30),
 ]
 
 # Farben Kopfzeile
@@ -186,6 +200,7 @@ class ExcelStore(LeadStore):
         ws_protokoll = wb.create_sheet(title="Protokoll")
         ws_verworfen = wb.create_sheet(title="Verworfen")
         ws_suchbegriffe = wb.create_sheet(title="Suchbegriffe")
+        ws_aenderungen = wb.create_sheet(title="Änderungen")
 
         # Header schreiben und formatieren
         self._setup_sheet_headers(ws_leads, LEADS_COLUMNS)
@@ -193,6 +208,7 @@ class ExcelStore(LeadStore):
         self._setup_sheet_headers(ws_protokoll, PROTOKOLL_COLUMNS)
         self._setup_sheet_headers(ws_verworfen, VERWORFEN_COLUMNS)
         self._setup_sheet_headers(ws_suchbegriffe, SUCHBEGRIFFE_COLUMNS)
+        self._setup_sheet_headers(ws_aenderungen, AENDERUNGEN_COLUMNS)
 
         # Datenvalidierung (Dropdowns) auf Blatt 'Leads' einrichten
         self._setup_data_validation(ws_leads)
@@ -285,6 +301,13 @@ class ExcelStore(LeadStore):
             wb = openpyxl.load_workbook(self.file_path)
 
         # Bestehende Dateien um neu hinzugekommene Spalten ergänzen (Kopfzeile)
+        if "Änderungen" not in wb.sheetnames:
+            ws_aenderungen = wb.create_sheet(title="Änderungen")
+            self._setup_sheet_headers(ws_aenderungen, AENDERUNGEN_COLUMNS)
+        if "Suchbegriffe" not in wb.sheetnames:
+            ws_suchbegriffe = wb.create_sheet(title="Suchbegriffe")
+            self._setup_sheet_headers(ws_suchbegriffe, SUCHBEGRIFFE_COLUMNS)
+
         ws = wb["Leads"]
         for col_idx, (_, header, _w) in enumerate(LEADS_COLUMNS, start=1):
             if not ws.cell(row=1, column=col_idx).value:
@@ -305,6 +328,10 @@ class ExcelStore(LeadStore):
                 val = "\n".join(lead.quellen) if lead.quellen else ""
             elif key == "manuelle_freigabe":
                 val = "ja" if lead.manuelle_freigabe else ""
+            elif key == "gesperrte_felder":
+                val = json.dumps(lead.gesperrte_felder, ensure_ascii=False) if lead.gesperrte_felder else "[]"
+            elif key == "score_manuell":
+                val = "ja" if lead.score_manuell else ""
             elif key in ("score", "anzahl_nachfass"):
                 val = int(val or 0)
             elif val is None:
@@ -332,6 +359,18 @@ class ExcelStore(LeadStore):
                     data[key] = []
             elif key == "manuelle_freigabe":
                 data[key] = str(val).strip().lower() in ("ja", "true", "1") if val is not None else False
+            elif key == "score_manuell":
+                data[key] = str(val).strip().lower() in ("ja", "true", "1") if val is not None else False
+            elif key == "gesperrte_felder":
+                if isinstance(val, str) and val.strip():
+                    try:
+                        data[key] = json.loads(val)
+                    except Exception:
+                        data[key] = [f.strip() for f in val.split(",") if f.strip()]
+                elif isinstance(val, list):
+                    data[key] = val
+                else:
+                    data[key] = []
             elif key == "begruendung":
                 data[key] = str(val) if val is not None else ""
             elif key in ("score", "anzahl_nachfass"):
@@ -392,21 +431,25 @@ class ExcelStore(LeadStore):
                     rows_by_id[str(lid)] = row_idx
 
         # Manuell gepflegte Spalten, die beim Update nicht ungewollt geleert werden dürfen
-        manual_cols = {"freigabe", "verwerfungsgrund", "kommentar_berater", "kontaktiert_am", "mail_entwurf", "manuelle_freigabe"}
+        manual_cols = {
+            "freigabe", "verwerfungsgrund", "kommentar_berater", "kontaktiert_am",
+            "mail_entwurf", "manuelle_freigabe", "gesperrte_felder", "score_manuell",
+        }
 
         processed = 0
         for lead in leads:
             norm_domain = normalize_domain(lead.domain)
             lead.domain = norm_domain
             row_dict = self._lead_to_row_dict(lead)
+            force = getattr(lead, "_force_manual_update", False)
 
             target_row = rows_by_id.get(lead.lead_id) or existing_rows.get(norm_domain)
             if target_row:
                 # Update bestehende Zeile
                 for col_idx, key in enumerate(keys, start=1):
                     new_val = row_dict.get(key)
-                    # Manuelle Berater-Felder schützen, falls neuer Wert leer ist
-                    if key in manual_cols and not new_val:
+                    # Manuelle Berater-Felder schützen, falls neuer Wert leer ist und nicht erzwungen
+                    if key in manual_cols and not new_val and not force:
                         existing_val = ws.cell(row=target_row, column=col_idx).value
                         if existing_val:
                             continue
@@ -613,6 +656,53 @@ class ExcelStore(LeadStore):
                 out[str(term).strip()] = str(dt or "")
         wb.close()
         return out
+
+    def _ensure_aenderungen_sheet(self, wb: openpyxl.Workbook) -> Any:
+        if "Änderungen" not in wb.sheetnames:
+            ws = wb.create_sheet(title="Änderungen")
+            self._setup_sheet_headers(ws, AENDERUNGEN_COLUMNS)
+            return ws
+        return wb["Änderungen"]
+
+    def add_change_entry(self, entry: AenderungEntry) -> None:
+        """Fügt einen Eintrag ins Blatt 'Änderungen' ein."""
+        wb = self._load_workbook()
+        ws = self._ensure_aenderungen_sheet(wb)
+        target_row = ws.max_row + 1
+        keys = [k for k, _, _ in AENDERUNGEN_COLUMNS]
+        row_dict = entry.model_dump()
+        for col_idx, key in enumerate(keys, start=1):
+            val = row_dict.get(key)
+            if val is None:
+                val = ""
+            elif isinstance(val, (dict, list)):
+                val = json.dumps(val, ensure_ascii=False)
+            ws.cell(row=target_row, column=col_idx, value=str(val) if val != "" else "")
+        self._save(wb)
+        wb.close()
+
+    def get_change_entries(self, lead_id: str | None = None) -> list[AenderungEntry]:
+        """Liest Einträge aus dem Blatt 'Änderungen' ein."""
+        wb = self._load_workbook()
+        if "Änderungen" not in wb.sheetnames:
+            wb.close()
+            return []
+        ws = wb["Änderungen"]
+        keys = [k for k, _, _ in AENDERUNGEN_COLUMNS]
+        entries: list[AenderungEntry] = []
+        for row_idx in range(2, ws.max_row + 1):
+            lid = ws.cell(row=row_idx, column=1).value
+            if not lid:
+                continue
+            if lead_id and str(lid).strip() != lead_id.strip():
+                continue
+            data = {keys[c - 1]: ws.cell(row=row_idx, column=c).value for c in range(1, len(keys) + 1)}
+            try:
+                entries.append(AenderungEntry.model_validate(data))
+            except Exception:
+                continue
+        wb.close()
+        return entries
 
     def add_rejected_lead(self, rejected: RejectedLead) -> None:
         """Fügt einen Lead ins Blatt 'Verworfen' ein."""

@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-from p7_akquise.models import ExclusionEntry, Lead, ProtocolEntry, RejectedLead
+from p7_akquise.models import AenderungEntry, ExclusionEntry, Lead, ProtocolEntry, RejectedLead
 
 
 class LeadStore(ABC):
@@ -72,6 +72,16 @@ class LeadStore(ABC):
     @abstractmethod
     def add_rejected_lead(self, rejected: RejectedLead) -> None:
         """Fügt einen verworfenen Lead zur Liste hinzu."""
+        pass
+
+    @abstractmethod
+    def add_change_entry(self, entry: AenderungEntry) -> None:
+        """Fügt einen Eintrag ins Änderungsprotokoll ein."""
+        pass
+
+    @abstractmethod
+    def get_change_entries(self, lead_id: str | None = None) -> list[AenderungEntry]:
+        """Liest Einträge aus dem Änderungsprotokoll ein, optional gefiltert nach lead_id."""
         pass
 
     @abstractmethod

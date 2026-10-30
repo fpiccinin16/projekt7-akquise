@@ -341,5 +341,20 @@ SEITENTEXTE:
         lead.quellen = sorted(valid_sources)
         lead.modell_version = scoring_res.modell_version
         lead.status = "zur Prüfung" if scoring_res.klasse == "A" else ("beobachten" if scoring_res.klasse == "B" else "verworfen")
+
+        # Manuelle Änderungen und Sperren respektieren
+        if base is not None:
+            lead.gesperrte_felder = list(base.gesperrte_felder)
+            lead.score_manuell = base.score_manuell
+            for f in base.gesperrte_felder:
+                if hasattr(base, f):
+                    setattr(lead, f, getattr(base, f))
+            if base.score_manuell:
+                lead.score = base.score
+                lead.klasse = base.klasse
+                lead.teilscores = dict(base.teilscores)
+                lead.begruendung = base.begruendung
+                lead.status = base.status
+
         lead.aktualisiert_am = datetime.now(timezone.utc).isoformat()
         return lead

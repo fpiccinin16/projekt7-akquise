@@ -155,6 +155,8 @@ class Lead(BaseModel):
     mail_entwurf: str | None = None
     erstellt_am: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     aktualisiert_am: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    gesperrte_felder: list[str] = Field(default_factory=list, description="Manuell geänderte Felder, die nicht überschrieben werden")
+    score_manuell: bool = Field(default=False, description="Score/Klasse manuell übersteuert")
 
     @field_validator("domain")
     @classmethod
@@ -210,6 +212,18 @@ class RejectedLead(BaseModel):
     @classmethod
     def clean_domain(cls, v: str) -> str:
         return normalize_domain(v)
+
+
+class AenderungEntry(BaseModel):
+    """Eintrag im Änderungsprotokoll (Blatt Änderungen)."""
+    lead_id: str
+    firma: str | None = None
+    feld: str
+    alt: str | None = None
+    neu: str | None = None
+    benutzer: str = "KAM"
+    zeitpunkt: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    grund: str | None = None
 
 
 class ScoringModelConfig(BaseModel):

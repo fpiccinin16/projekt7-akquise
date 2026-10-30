@@ -5,7 +5,9 @@ from __future__ import annotations
 import base64
 import csv
 import io
+import json
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal
@@ -17,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from p7_akquise.config import setting
-from p7_akquise.models import Lead, RejectedLead, normalize_domain
+from p7_akquise.models import AenderungEntry, Lead, RejectedLead, normalize_domain
 from p7_akquise.steps.scoring import load_scoring_model
 from p7_akquise.storage.base import LeadStore
 from p7_akquise.storage.excel_store import ExcelStore
@@ -62,6 +64,17 @@ class ImportPayload(BaseModel):
 class KontaktiertPayload(BaseModel):
     benutzer: str = "Berater"
     kontaktiert_am: str | None = None
+
+
+class PatchLeadPayload(BaseModel):
+    felder: dict[str, Any]
+    aktualisiert_am: str | None = None
+    benutzer: str = "KAM"
+    grund: str | None = None
+
+
+class SperreAufhebenPayload(BaseModel):
+    feld: str
 
 
 def create_app(store: LeadStore | None = None) -> FastAPI:
@@ -135,6 +148,31 @@ def create_app(store: LeadStore | None = None) -> FastAPI:
             "termine": sum(1 for l in all_leads if l.status == "termin"),
             "fehler": sum(1 for l in all_leads if l.status == "fehler"),
             "letzter_lauf": last_run.model_dump() if last_run else None,
+        }
+
+    # 1b. Zähler für Filter (unabhängig von gesetzten Filtern)
+    @app.get("/api/counts")
+    def get_counts(store: LeadStore = Depends(get_lead_store)) -> dict[str, Any]:
+        leads = store.get_all_leads()
+        status_c: dict[str, int] = {}
+        klasse_c: dict[str, int] = {}
+        segment_c: dict[str, int] = {}
+        kanal_c: dict[str, int] = {}
+        for l in leads:
+            s = l.status or "neu"
+            status_c[s] = status_c.get(s, 0) + 1
+            k = l.klasse or "C"
+            klasse_c[k] = klasse_c.get(k, 0) + 1
+            seg = l.segment or "C"
+            segment_c[seg] = segment_c.get(seg, 0) + 1
+            kan = "Adressliste" if "Adressliste" in (l.quelle_kanal or "") else "KI-Websuche"
+            kanal_c[kan] = kanal_c.get(kan, 0) + 1
+        return {
+            "total": len(leads),
+            "status": status_c,
+            "klasse": klasse_c,
+            "segment": segment_c,
+            "quelle_kanal": kanal_c,
         }
 
     # 2. Leads Liste mit Filtern
@@ -330,6 +368,277 @@ def create_app(store: LeadStore | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="Lead nicht gefunden.")
         return {"success": True, "message": "Lead erfolgreich gelöscht und auf 'Verworfen' gesetzt."}
 
+    # 6c. Lead bearbeiten (PATCH)
+    @app.patch("/api/leads/{lead_id}")
+    def patch_lead(
+        lead_id: str,
+        payload: PatchLeadPayload,
+        store: LeadStore = Depends(get_lead_store),
+    ) -> dict[str, Any]:
+        all_leads = store.get_all_leads()
+        lead = None
+        for l in all_leads:
+            if l.lead_id == lead_id or normalize_domain(l.domain) == normalize_domain(lead_id):
+                lead = l
+                break
+
+        if not lead:
+            raise HTTPException(status_code=404, detail=f"Lead '{lead_id}' nicht gefunden.")
+
+        # Konfliktschutz: weicht aktualisiert_am vom gespeicherten Wert ab -> 409
+        if payload.aktualisiert_am and lead.aktualisiert_am:
+            if payload.aktualisiert_am.strip() != lead.aktualisiert_am.strip():
+                raise HTTPException(
+                    status_code=409,
+                    detail={"message": "Lead wurde inzwischen geändert.", "lead": lead.model_dump()},
+                )
+
+        editable_fields = {
+            "firma", "website", "strasse", "plz", "ort", "kanton", "land", "segment", "branche", "groesse",
+            "kaufsignal", "angebot", "kontakt_name", "kontakt_rolle", "kontakt_email", "kontakt_tel",
+            "teilscores", "score", "klasse", "begruendung", "quellen", "status", "wiedervorlage_am",
+            "kontaktiert_am", "anzahl_nachfass", "mail_entwurf", "kommentar_berater", "historie",
+            "freigabe", "verwerfungsgrund",
+        }
+        readonly_fields = {
+            "lead_id", "domain", "modell_version", "quelle_kanal", "import_datei", "erstellt_am", "aktualisiert_am",
+            "gesperrte_felder", "score_manuell",
+        }
+
+        for f in payload.felder:
+            if f in readonly_fields:
+                raise HTTPException(status_code=422, detail=f"Feld '{f}' ist schreibgeschützt.")
+            if f not in editable_fields:
+                raise HTTPException(status_code=422, detail=f"Feld '{f}' ist nicht bearbeitbar.")
+
+        # Validierung
+        if "kontakt_email" in payload.felder:
+            em = str(payload.felder["kontakt_email"] or "").strip()
+            if em and not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", em):
+                raise HTTPException(status_code=422, detail="Ungültiges E-Mail-Format (kontakt_email)")
+
+        if "website" in payload.felder:
+            web = str(payload.felder["website"] or "").strip()
+            if web and not (web.startswith("http://") or web.startswith("https://")) and "." not in web:
+                raise HTTPException(status_code=422, detail="Ungültige URL (website)")
+
+        if "plz" in payload.felder:
+            plz = str(payload.felder["plz"] or "").strip()
+            if plz and not re.match(r"^\d{4,5}$", plz):
+                raise HTTPException(status_code=422, detail="PLZ muss 4 bis 5 Ziffern enthalten (plz)")
+
+        if "segment" in payload.felder:
+            seg = payload.felder["segment"]
+            if seg not in ("A", "B", "C"):
+                raise HTTPException(status_code=422, detail="Segment muss A, B oder C sein (segment)")
+
+        if "klasse" in payload.felder:
+            kl = payload.felder["klasse"]
+            if kl not in ("A", "B", "C"):
+                raise HTTPException(status_code=422, detail="Klasse muss A, B oder C sein (klasse)")
+
+        if "score" in payload.felder:
+            try:
+                sc = int(payload.felder["score"])
+                if sc < 0 or sc > 100:
+                    raise ValueError
+            except Exception:
+                raise HTTPException(status_code=422, detail="Score muss eine Zahl zwischen 0 und 100 sein (score)")
+
+        if "status" in payload.felder:
+            st = payload.felder["status"]
+            valid_st = {
+                "neu", "zu bewerten", "zur Prüfung", "freigegeben", "beobachten",
+                "verworfen", "kontaktiert", "nachgefasst_1", "nachgefasst_2",
+                "interesse", "termin", "kalt", "fehler"
+            }
+            if st not in valid_st:
+                raise HTTPException(status_code=422, detail="Ungültiger Status (status)")
+
+        if "wiedervorlage_am" in payload.felder:
+            w = payload.felder["wiedervorlage_am"]
+            if w:
+                try:
+                    datetime.strptime(str(w).strip()[:10], "%Y-%m-%d")
+                except Exception:
+                    raise HTTPException(status_code=422, detail="Datum muss im Format YYYY-MM-DD sein (wiedervorlage_am)")
+
+        if "kontaktiert_am" in payload.felder:
+            k = payload.felder["kontaktiert_am"]
+            if k:
+                try:
+                    datetime.strptime(str(k).strip()[:10], "%Y-%m-%d")
+                except Exception:
+                    raise HTTPException(status_code=422, detail="Datum muss im Format YYYY-MM-DD sein (kontaktiert_am)")
+
+        if "teilscores" in payload.felder:
+            ts = payload.felder["teilscores"]
+            if not isinstance(ts, dict):
+                raise HTTPException(status_code=422, detail="Teilscores muss ein JSON-Objekt sein (teilscores)")
+            cfg = load_scoring_model()
+            max_catalog: dict[str, int] = {}
+            for _cat, c_map in cfg.kriterien.items():
+                if isinstance(c_map, dict):
+                    for cn, cd in c_map.items():
+                        pts = cd.get("punkte", 0)
+                        max_p = max(pts.values()) if isinstance(pts, dict) else int(pts)
+                        max_catalog[cn] = max_p
+            for k_name, val_p in ts.items():
+                try:
+                    p_int = int(val_p)
+                except Exception:
+                    raise HTTPException(status_code=422, detail=f"Teilscore für '{k_name}' muss eine Zahl sein (teilscores)")
+                if k_name in max_catalog:
+                    max_limit = max_catalog[k_name]
+                    if p_int < 0 or p_int > max_limit:
+                        raise HTTPException(status_code=422, detail=f"Teilscore für '{k_name}' darf maximal {max_limit} Punkte betragen (teilscores)")
+                elif p_int < 0 or p_int > 100:
+                    raise HTTPException(status_code=422, detail=f"Ungültiger Teilscore für '{k_name}' (teilscores)")
+
+        # Status 'verworfen' ohne verwerfungsgrund
+        new_status = payload.felder.get("status", lead.status)
+        new_grund = payload.felder.get("verwerfungsgrund", lead.verwerfungsgrund)
+        if new_status == "verworfen" and not (new_grund and str(new_grund).strip()):
+            raise HTTPException(status_code=422, detail="Verwerfungsgrund ist Pflicht beim Status 'verworfen' (verwerfungsgrund)")
+
+        # score oder klasse direkt geändert -> grund ist Pflicht, score_manuell = True
+        if "score" in payload.felder or "klasse" in payload.felder:
+            if not (payload.grund and str(payload.grund).strip()):
+                raise HTTPException(status_code=422, detail="Begründung (grund) ist Pflicht bei manueller Änderung von Score oder Klasse (grund)")
+            lead.score_manuell = True
+
+        # website geändert -> domain neu normalisieren; existiert Domain bei anderem Lead -> 409
+        if "website" in payload.felder:
+            new_web = str(payload.felder["website"] or "").strip()
+            new_dom = normalize_domain(new_web)
+            if new_dom and new_dom != normalize_domain(lead.domain):
+                for other in all_leads:
+                    if other.lead_id != lead.lead_id and normalize_domain(other.domain) == new_dom:
+                        raise HTTPException(status_code=409, detail=f"Dublette: {other.firma or other.domain}")
+                lead.website = new_web
+                lead.domain = new_dom
+
+        # teilscores geändert -> score als Summe neu berechnen, klasse über ScoringEngine, score_manuell = True
+        if "teilscores" in payload.felder:
+            new_ts = {str(k): int(v) for k, v in payload.felder["teilscores"].items()}
+            lead.teilscores = new_ts
+            from p7_akquise.steps.scoring import ScoringEngine
+            engine = ScoringEngine()
+            new_calc_score = sum(new_ts.values())
+            lead.score = new_calc_score
+            lead.klasse = engine.determine_class(new_calc_score)
+            lead.score_manuell = True
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        for field, new_val in payload.felder.items():
+            old_val = getattr(lead, field, None)
+            alt_str = json.dumps(old_val, ensure_ascii=False) if isinstance(old_val, (dict, list)) else ("" if old_val is None else str(old_val))
+            neu_str = json.dumps(new_val, ensure_ascii=False) if isinstance(new_val, (dict, list)) else ("" if new_val is None else str(new_val))
+            if alt_str != neu_str:
+                if field not in lead.gesperrte_felder:
+                    lead.gesperrte_felder.append(field)
+                store.add_change_entry(AenderungEntry(
+                    lead_id=lead.lead_id,
+                    firma=lead.firma,
+                    feld=field,
+                    alt=alt_str,
+                    neu=neu_str,
+                    benutzer=payload.benutzer or "KAM",
+                    zeitpunkt=now_iso,
+                    grund=payload.grund,
+                ))
+                if field not in ("website", "teilscores"):
+                    setattr(lead, field, new_val)
+
+        lead.aktualisiert_am = now_iso
+        lead._force_manual_update = True
+        store.upsert_lead(lead)
+        return {"success": True, "lead": lead.model_dump()}
+
+    # 6d. Neu bewerten (POST)
+    @app.post("/api/leads/{lead_id}/neu-bewerten")
+    def neu_bewerten(lead_id: str, store: LeadStore = Depends(get_lead_store)) -> dict[str, Any]:
+        all_leads = store.get_all_leads()
+        lead = None
+        for l in all_leads:
+            if l.lead_id == lead_id or normalize_domain(l.domain) == normalize_domain(lead_id):
+                lead = l
+                break
+        if not lead:
+            raise HTTPException(status_code=404, detail="Lead nicht gefunden.")
+
+        old_status = lead.status
+        lead.status = "zu bewerten"
+        bewertung_fields = {"score", "klasse", "teilscores", "begruendung"}
+        lead.gesperrte_felder = [f for f in lead.gesperrte_felder if f not in bewertung_fields]
+        lead.score_manuell = False
+        now_iso = datetime.now(timezone.utc).isoformat()
+        store.add_change_entry(AenderungEntry(
+            lead_id=lead.lead_id,
+            firma=lead.firma,
+            feld="status",
+            alt=old_status,
+            neu="zu bewerten",
+            benutzer="KAM",
+            zeitpunkt=now_iso,
+            grund="Neu bewerten angestossen",
+        ))
+        lead.aktualisiert_am = now_iso
+        lead._force_manual_update = True
+        store.upsert_lead(lead)
+        return {"success": True, "lead": lead.model_dump()}
+
+    # 6e. Sperre aufheben (POST)
+    @app.post("/api/leads/{lead_id}/sperre-aufheben")
+    def sperre_aufheben(
+        lead_id: str,
+        payload: SperreAufhebenPayload,
+        store: LeadStore = Depends(get_lead_store),
+    ) -> dict[str, Any]:
+        all_leads = store.get_all_leads()
+        lead = None
+        for l in all_leads:
+            if l.lead_id == lead_id or normalize_domain(l.domain) == normalize_domain(lead_id):
+                lead = l
+                break
+        if not lead:
+            raise HTTPException(status_code=404, detail="Lead nicht gefunden.")
+
+        if payload.feld in lead.gesperrte_felder:
+            lead.gesperrte_felder.remove(payload.feld)
+        if payload.feld in ("score", "klasse", "teilscores"):
+            if not any(f in lead.gesperrte_felder for f in ("score", "klasse", "teilscores")):
+                lead.score_manuell = False
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        store.add_change_entry(AenderungEntry(
+            lead_id=lead.lead_id,
+            firma=lead.firma,
+            feld=f"sperre:{payload.feld}",
+            alt="gesperrt",
+            neu="freigegeben",
+            benutzer="KAM",
+            zeitpunkt=now_iso,
+            grund="Sperre aufgehoben",
+        ))
+        lead.aktualisiert_am = now_iso
+        lead._force_manual_update = True
+        store.upsert_lead(lead)
+        return {"success": True, "lead": lead.model_dump()}
+
+    # 6f. Änderungsverlauf eines Leads (GET)
+    @app.get("/api/leads/{lead_id}/aenderungen")
+    def list_aenderungen(lead_id: str, store: LeadStore = Depends(get_lead_store)) -> list[dict[str, Any]]:
+        all_leads = store.get_all_leads()
+        actual_lead_id = lead_id
+        for l in all_leads:
+            if l.lead_id == lead_id or normalize_domain(l.domain) == normalize_domain(lead_id):
+                actual_lead_id = l.lead_id
+                break
+        entries = store.get_change_entries(actual_lead_id)
+        entries.sort(key=lambda x: x.zeitpunkt, reverse=True)
+        return [e.model_dump() for e in entries]
+
     # 7. CSV-Export (UTF-8 mit BOM, Semikolon-Trennzeichen)
     @app.get("/api/export.csv")
     def export_csv(store: LeadStore = Depends(get_lead_store)) -> Response:
@@ -346,7 +655,8 @@ def create_app(store: LeadStore | None = None) -> FastAPI:
             ("Segment", "segment"), ("Branche", "branche"), ("Grösse", "groesse"), ("Signal", "kaufsignal"),
             ("Einstieg", "angebot"), ("Kontakt Name", "kontakt_name"), ("Kontakt Rolle", "kontakt_rolle"),
             ("Kontakt E-Mail", "kontakt_email"), ("Kontakt Telefon", "kontakt_tel"), ("Score", "score"),
-            ("Klasse", "klasse"), ("Status", "status"), ("Kanal", "quelle_kanal"), ("Historie", "historie"),
+            ("Klasse", "klasse"), ("Score manuell", "score_manuell"), ("Gesperrte Felder", "gesperrte_felder"),
+            ("Status", "status"), ("Kanal", "quelle_kanal"), ("Historie", "historie"),
             ("Freigabe", "freigabe"), ("Verwerfungsgrund", "verwerfungsgrund"), ("Kommentar KAM", "kommentar_berater"),
             ("Kontaktiert am", "kontaktiert_am"), ("Wiedervorlage am", "wiedervorlage_am"),
             ("Manuelle Freigabe", "manuelle_freigabe"), ("Modellversion", "modell_version"), ("Erstellt am", "erstellt_am"),
@@ -362,11 +672,46 @@ def create_app(store: LeadStore | None = None) -> FastAPI:
                     v = seg_labels.get(str(v), v)
                 elif key == "manuelle_freigabe":
                     v = "ja" if v else ""
+                elif key == "score_manuell":
+                    v = "ja" if v else "nein"
+                elif key == "gesperrte_felder":
+                    v = ", ".join(v) if isinstance(v, list) else (str(v) if v else "")
                 row.append("" if v is None else v)
             writer.writerow(row)
 
         csv_content = output.getvalue().encode("utf-8")
         filename = f"projekt7_Leads_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        return Response(
+            content=csv_content,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+
+    # 7b. Neuer Export aller Änderungen (GET /api/aenderungen.csv)
+    @app.get("/api/aenderungen.csv")
+    def export_aenderungen_csv(store: LeadStore = Depends(get_lead_store)) -> Response:
+        entries = store.get_change_entries()
+        entries.sort(key=lambda x: x.zeitpunkt, reverse=True)
+
+        output = io.StringIO()
+        output.write("\ufeff")
+        writer = csv.writer(output, delimiter=";", quoting=csv.QUOTE_MINIMAL)
+        cols = ["Lead ID", "Unternehmen", "Feld", "Alter Wert", "Neuer Wert", "Benutzer", "Zeitpunkt", "Grund"]
+        writer.writerow(cols)
+        for e in entries:
+            writer.writerow([
+                e.lead_id,
+                e.firma or "",
+                e.feld,
+                e.alt or "",
+                e.neu or "",
+                e.benutzer,
+                e.zeitpunkt,
+                e.grund or "",
+            ])
+
+        csv_content = output.getvalue().encode("utf-8")
+        filename = f"projekt7_Aenderungen_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
         return Response(
             content=csv_content,
             media_type="text/csv; charset=utf-8",

@@ -101,6 +101,10 @@ class AkquisePipeline:
         if lead.status == "fehler":
             buckets["fehler"].append(lead)
             return
+        if lead.score_manuell:
+            if lead.klasse in buckets:
+                buckets[lead.klasse].append(lead)
+            return
         if lead.klasse == "A":
             lead.status = "zur Prüfung"
             lead.wiedervorlage_am = None
