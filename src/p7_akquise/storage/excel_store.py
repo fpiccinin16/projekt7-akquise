@@ -151,18 +151,26 @@ class ExcelStore(LeadStore):
 
     def __init__(self, file_path: str | Path = "data/projekt7_Leads.xlsx") -> None:
         self.file_path = Path(file_path)
+        self._blob_download_failed: bool = False
+        self._known_lead_count: int = 0
+        self._allow_lead_count_drop: bool = False
+
         from p7_akquise.storage import blob_sync
         self._blob = blob_sync.blob_enabled()
         if self._blob:
             # Gemeinsamer Speicher (Vercel Blob): lokale Datei ist nur eine Arbeitskopie
             self.file_path = Path("/tmp" if os.name != "nt" else os.getenv("TEMP", ".")) / self.file_path.name
             try:
-                if not blob_sync.download_latest(self.file_path) and Path(file_path).exists() and not self.file_path.exists():
+                downloaded = blob_sync.download_latest(self.file_path)
+                if not downloaded and Path(file_path).exists() and not self.file_path.exists():
                     import shutil
                     shutil.copy2(Path(file_path), self.file_path)  # Startbestand einmalig übernehmen
+                self._blob_download_failed = False
             except Exception as e:
+                self._blob_download_failed = True
                 logger.error("Blob-Speicher nicht erreichbar: %s", e)
-                raise
+                if not self.file_path.exists():
+                    raise RuntimeError(f"Blob-Speicher nicht erreichbar und keine lokale Arbeitskopie vorhanden: {e}") from e
         elif os.getenv("VERCEL"):
             # Auf Vercel ist das Dateisystem read-only, ausser in /tmp
             tmp_path = Path("/tmp") / self.file_path.name
@@ -189,6 +197,9 @@ class ExcelStore(LeadStore):
         self._ensure_parent_dir()
         if self.file_path.exists():
             return
+
+        if getattr(self, "_blob", False) and getattr(self, "_blob_download_failed", False):
+            raise RuntimeError("Blob-Download ist fehlgeschlagen. Erstellung einer leeren Datei blockiert.")
 
         wb = openpyxl.Workbook()
         # Default-Blatt umbenennen zu 'Leads'
@@ -268,6 +279,30 @@ class ExcelStore(LeadStore):
         dv_grund.add(f"{grund_col_letter}2:{grund_col_letter}1000")
 
     def _save(self, wb: openpyxl.Workbook, upload_blob: bool = True) -> None:
+        if getattr(self, "_blob", False) and getattr(self, "_blob_download_failed", False):
+            raise RuntimeError("Speichern blockiert: Blob-Download ist zuvor fehlgeschlagen. Überschreiben der Daten verhindert.")
+
+        # Sicherheitsprüfung: Lead-Verlust > 5 % verhindern
+        if "Leads" in wb.sheetnames:
+            ws_leads = wb["Leads"]
+            keys = [k for k, _, _ in LEADS_COLUMNS]
+            dom_idx = keys.index("domain") + 1
+            id_idx = keys.index("lead_id") + 1
+            current_count = sum(
+                1 for r in range(2, ws_leads.max_row + 1)
+                if ws_leads.cell(row=r, column=dom_idx).value or ws_leads.cell(row=r, column=id_idx).value
+            )
+
+            known = getattr(self, "_known_lead_count", 0)
+            if known > 0 and not getattr(self, "_allow_lead_count_drop", False):
+                min_allowed = known * 0.95
+                if current_count < min_allowed:
+                    raise RuntimeError(
+                        f"Abbruch: Anzahl Leads sinkt von {known} auf {current_count} "
+                        f"(> 5 % Verlust). Speichern und Upload blockiert!"
+                    )
+            self._known_lead_count = current_count
+
         wb.save(self.file_path)
         if upload_blob and getattr(self, "_blob", False):
             from p7_akquise.storage import blob_sync
@@ -278,8 +313,13 @@ class ExcelStore(LeadStore):
             from p7_akquise.storage import blob_sync
             try:
                 blob_sync.download_latest(self.file_path)
+                self._blob_download_failed = False
             except Exception as e:
-                logger.warning("Neueste Blob-Version nicht geladen, arbeite mit lokaler Kopie: %s", e)
+                self._blob_download_failed = True
+                logger.error("Neueste Blob-Version nicht geladen: %s", e)
+                if not self.file_path.exists():
+                    raise RuntimeError(f"Blob-Download fehlgeschlagen und lokale Datei existiert nicht: {e}") from e
+
         self.init_store()
         try:
             wb = openpyxl.load_workbook(self.file_path)
@@ -298,10 +338,7 @@ class ExcelStore(LeadStore):
                     recovered = True
                     break
             if not recovered:
-                # Keinesfalls leeres Dokument in Blob hochladen!
-                wb = openpyxl.Workbook()
-                self._setup_sheet_headers(wb.active, LEADS_COLUMNS)
-                return wb
+                raise RuntimeError(f"Beschädigte Arbeitskopie ({e}) und keine Wiederherstellung möglich. Vorgang abgebrochen.") from e
             wb = openpyxl.load_workbook(self.file_path)
 
         # Bestehende Dateien um neu hinzugekommene Spalten ergänzen (Kopfzeile)
@@ -316,6 +353,18 @@ class ExcelStore(LeadStore):
         for col_idx, (_, header, _w) in enumerate(LEADS_COLUMNS, start=1):
             if not ws.cell(row=1, column=col_idx).value:
                 ws.cell(row=1, column=col_idx, value=header)
+
+        # Bekannte Anzahl Leads aus Arbeitsmappe aktualisieren
+        keys = [k for k, _, _ in LEADS_COLUMNS]
+        dom_idx = keys.index("domain") + 1
+        id_idx = keys.index("lead_id") + 1
+        leads_count = sum(
+            1 for r in range(2, ws.max_row + 1)
+            if ws.cell(row=r, column=dom_idx).value or ws.cell(row=r, column=id_idx).value
+        )
+        if leads_count > 0:
+            self._known_lead_count = max(getattr(self, "_known_lead_count", 0), leads_count)
+
         return wb
 
     def _lead_to_row_dict(self, lead: Lead) -> dict[str, Any]:
@@ -670,18 +719,25 @@ class ExcelStore(LeadStore):
 
     def add_change_entry(self, entry: AenderungEntry) -> None:
         """Fügt einen Eintrag ins Blatt 'Änderungen' ein."""
+        self.add_change_entries([entry])
+
+    def add_change_entries(self, entries: list[AenderungEntry]) -> None:
+        """Fügt mehrere Einträge gebündelt ins Blatt 'Änderungen' ein (ein einziger Save)."""
+        if not entries:
+            return
         wb = self._load_workbook()
         ws = self._ensure_aenderungen_sheet(wb)
-        target_row = ws.max_row + 1
         keys = [k for k, _, _ in AENDERUNGEN_COLUMNS]
-        row_dict = entry.model_dump()
-        for col_idx, key in enumerate(keys, start=1):
-            val = row_dict.get(key)
-            if val is None:
-                val = ""
-            elif isinstance(val, (dict, list)):
-                val = json.dumps(val, ensure_ascii=False)
-            ws.cell(row=target_row, column=col_idx, value=str(val) if val != "" else "")
+        for entry in entries:
+            target_row = ws.max_row + 1
+            row_dict = entry.model_dump()
+            for col_idx, key in enumerate(keys, start=1):
+                val = row_dict.get(key)
+                if val is None:
+                    val = ""
+                elif isinstance(val, (dict, list)):
+                    val = json.dumps(val, ensure_ascii=False)
+                ws.cell(row=target_row, column=col_idx, value=str(val) if val != "" else "")
         self._save(wb)
         wb.close()
 
@@ -793,7 +849,11 @@ class ExcelStore(LeadStore):
         for row_idx in range(2, ws.max_row + 1):
             if str(ws.cell(row=row_idx, column=id_idx).value or "") == lead_id:
                 ws.delete_rows(row_idx)
-                self._save(wb)
+                self._allow_lead_count_drop = True
+                try:
+                    self._save(wb)
+                finally:
+                    self._allow_lead_count_drop = False
                 wb.close()
                 return True
         wb.close()
@@ -849,7 +909,11 @@ class ExcelStore(LeadStore):
             ws_verworfen.cell(row=v_row, column=3, value=grund)
             ws_verworfen.cell(row=v_row, column=4, value=today_str)
 
-        self._save(wb)
+        self._allow_lead_count_drop = True
+        try:
+            self._save(wb)
+        finally:
+            self._allow_lead_count_drop = False
         wb.close()
         return len(to_delete)
 

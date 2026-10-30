@@ -79,6 +79,11 @@ class LeadStore(ABC):
         """Fügt einen Eintrag ins Änderungsprotokoll ein."""
         pass
 
+    def add_change_entries(self, entries: list[AenderungEntry]) -> None:
+        """Fügt mehrere Einträge ins Änderungsprotokoll ein."""
+        for entry in entries:
+            self.add_change_entry(entry)
+
     @abstractmethod
     def get_change_entries(self, lead_id: str | None = None) -> list[AenderungEntry]:
         """Liest Einträge aus dem Änderungsprotokoll ein, optional gefiltert nach lead_id."""

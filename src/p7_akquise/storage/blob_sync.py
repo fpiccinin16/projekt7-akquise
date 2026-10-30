@@ -45,6 +45,14 @@ def _versions():
     return items
 
 
+def has_remote_blobs() -> bool:
+    try:
+        from vercel.blob import sync
+        return len(list(sync.query_blobs(prefix=PREFIX))) > 0
+    except Exception:
+        return False
+
+
 def download_latest(target: Path) -> bool:
     """Lädt die neueste gültige Version nach `target`. Gibt False zurück, wenn noch keine existiert."""
     global _CURRENT_BLOB_URL
@@ -83,10 +91,10 @@ def download_latest(target: Path) -> bool:
                 _CURRENT_BLOB_URL = candidate.url
                 return True
 
-            return False
+            raise RuntimeError(f"Keine gültige Excel-Version im Blob gefunden ({len(versions)} Versionen geprüft).")
         except Exception as e:
-            logger.warning("Fehler beim Herunterladen aus Blob: %s", e)
-            return False
+            logger.error("Fehler beim Herunterladen aus Blob: %s", e)
+            raise
 
 
 def upload(source: Path) -> None:

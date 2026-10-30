@@ -294,3 +294,164 @@ def test_batch_delete_leads(store):
     assert "d2.ch" in rej_domains
 
 
+def test_neu_bewerten_preserves_all_357_leads(store):
+    """Reproduktions- und Regressionstest: Neu bewerten darf keine anderen Leads löschen."""
+    # 357 Leads anlegen
+    leads = [
+        Lead(
+            domain=f"testfirma{i}.ch",
+            firma=f"Testfirma {i} AG",
+            status="freigegeben",
+            score=80 if i != 42 else 92,
+            klasse="A",
+            teilscores={"segment_produktion_handel": 20},
+            gesperrte_felder=["firma", "ort", "score", "klasse", "teilscores"] if i == 42 else [],
+            score_manuell=True if i == 42 else False,
+        )
+        for i in range(1, 358)
+    ]
+    store.upsert_leads(leads)
+    all_init = store.get_all_leads()
+    assert len(all_init) == 357, f"Initialer Bestand muss 357 Leads sein, ist: {len(all_init)}"
+
+    target_lead = store.get_lead_by_domain("testfirma42.ch")
+    assert target_lead is not None
+    c = client(store)
+
+    # Neu-bewerten aufrufen
+    res = c.post(f"/api/leads/{target_lead.lead_id}/neu-bewerten")
+    assert res.status_code == 200
+
+    # Prüfung: weiterhin genau 357 Leads
+    all_after = store.get_all_leads()
+    assert len(all_after) == 357, f"Bestand nach neu-bewerten muss weiterhin 357 sein, ist aber: {len(all_after)}"
+
+    # Ziel-Lead hat Status 'zu bewerten', Bewertungssperren aufgehoben, Stammdatensperren bleiben
+    updated42 = store.get_lead_by_domain("testfirma42.ch")
+    assert updated42.status == "zu bewerten"
+    assert updated42.score_manuell is False
+    assert "score" not in updated42.gesperrte_felder
+    assert "klasse" not in updated42.gesperrte_felder
+    assert "teilscores" not in updated42.gesperrte_felder
+    assert "firma" in updated42.gesperrte_felder
+    assert "ort" in updated42.gesperrte_felder
+
+    # Alle anderen 356 Leads unverändert
+    for l in all_after:
+        if l.domain != "testfirma42.ch":
+            assert l.status == "freigegeben", f"Lead {l.domain} wurde unerlaubt verändert: status={l.status}"
+
+
+def test_writing_endpoints_preserve_total_count(store):
+    """Prüft, dass alle schreibenden Endpoints die Gesamtzahl an Leads nicht senken."""
+    leads = [
+        Lead(
+            domain=f"write{i}.ch",
+            firma=f"Write {i} AG",
+            status="zur Prüfung" if i < 10 else "freigegeben",
+            score=75,
+            klasse="A",
+            ort="Zürich",
+            gesperrte_felder=["ort"] if i == 5 else [],
+        )
+        for i in range(1, 358)
+    ]
+    store.upsert_leads(leads)
+    assert len(store.get_all_leads()) == 357
+    c = client(store)
+
+    # 1. /api/leads/{id}/freigabe
+    l1 = store.get_lead_by_domain("write1.ch")
+    r_freigabe = c.post(f"/api/leads/{l1.lead_id}/freigabe", json={"entscheid": "ja", "benutzer": "Tester"})
+    assert r_freigabe.status_code == 200
+    assert len(store.get_all_leads()) == 357
+
+    # 2. /api/leads/{id}/kontaktiert
+    l2 = store.get_lead_by_domain("write2.ch")
+    r_kontakt = c.post(f"/api/leads/{l2.lead_id}/kontaktiert", json={"benutzer": "Tester"})
+    assert r_kontakt.status_code == 200
+    assert len(store.get_all_leads()) == 357
+
+    # 3. /api/leads/{id}/antwort
+    l3 = store.get_lead_by_domain("write3.ch")
+    r_antwort = c.post(f"/api/leads/{l3.lead_id}/antwort", json={"antwort": "interesse", "benutzer": "Tester"})
+    assert r_antwort.status_code == 200
+    assert len(store.get_all_leads()) == 357
+
+    # 4. PATCH /api/leads/{id} (inkl. mail_entwurf)
+    l4 = store.get_lead_by_domain("write4.ch")
+    r_patch = c.patch(f"/api/leads/{l4.lead_id}", json={
+        "felder": {"ort": "Basel", "mail_entwurf": "Sehr geehrte Damen und Herren..."},
+        "aktualisiert_am": l4.aktualisiert_am,
+        "benutzer": "Tester",
+    })
+    assert r_patch.status_code == 200
+    assert len(store.get_all_leads()) == 357
+
+    # 5. /api/leads/{id}/sperre-aufheben
+    l5 = store.get_lead_by_domain("write5.ch")
+    r_sperre = c.post(f"/api/leads/{l5.lead_id}/sperre-aufheben", json={"feld": "ort"})
+    assert r_sperre.status_code == 200
+    assert len(store.get_all_leads()) == 357
+
+    # 6. /api/import (erhöht oder belässt, senkt nie)
+    import base64
+    csv_bytes = "Firma;Website;PLZ;Ort\nNeuimport AG;https://neuimport.ch;8000;Zürich\n".encode("utf-8")
+    b64_data = base64.b64encode(csv_bytes).decode("ascii")
+    r_import = c.post("/api/import", json={"dateiname": "neu.csv", "inhalt_base64": b64_data})
+    assert r_import.status_code == 200
+    assert len(store.get_all_leads()) == 358  # 357 + 1 neuer Lead
+
+    # 7. DELETE /api/leads/{id} (senkt um genau 1)
+    l_del = store.get_lead_by_domain("write6.ch")
+    r_delete = c.delete(f"/api/leads/{l_del.lead_id}")
+    assert r_delete.status_code == 200
+    assert len(store.get_all_leads()) == 357  # genau 358 - 1 = 357
+
+
+def test_guard_blocks_save_when_lead_drop_exceeds_5_percent(store):
+    """Schutzregel: Abbruch, wenn die Anzahl Leads beim Speichern um mehr als 5 % sinkt."""
+    # 100 Leads initialisieren
+    leads = [Lead(domain=f"guard{i}.ch", firma=f"Guard {i} AG") for i in range(1, 101)]
+    store.upsert_leads(leads)
+    assert len(store.get_all_leads()) == 100
+    assert store._known_lead_count == 100
+
+    # Versuche ein Workbook mit nur 90 Leads zu speichern (10 % Verlust)
+    wb = store._load_workbook()
+    ws = wb["Leads"]
+    # 10 Zeilen löschen ohne Freigabe-Flag
+    for _ in range(10):
+        ws.delete_rows(ws.max_row)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        store._save(wb)
+
+    assert "> 5 % Verlust" in str(exc_info.value)
+    wb.close()
+
+    # Bestand in Datei weiterhin 100
+    assert len(store.get_all_leads()) == 100
+
+    # Gezieltes Löschen über delete_leads ist jedoch erlaubt (setzt _allow_lead_count_drop)
+    deleted = store.delete_leads([f"guard{i}.ch" for i in range(1, 11)])
+    assert deleted == 10
+    assert len(store.get_all_leads()) == 90
+
+
+def test_guard_blocks_save_when_blob_download_fails(store, monkeypatch):
+    """Schutzregel: Kein Speichern, wenn der Blob-Download fehlschlägt."""
+    wb = store._load_workbook()
+
+    # Simuliere fehlgeschlagenen Blob-Download
+    store._blob = True
+    store._blob_download_failed = True
+
+    with pytest.raises(RuntimeError) as exc_info:
+        store._save(wb)
+
+    assert "Blob-Download ist zuvor fehlgeschlagen" in str(exc_info.value)
+    wb.close()
+
+
+

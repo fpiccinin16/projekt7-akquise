@@ -551,6 +551,7 @@ def create_app(store: LeadStore | None = None) -> FastAPI:
             lead.score_manuell = True
 
         now_iso = datetime.now(timezone.utc).isoformat()
+        change_entries: list[AenderungEntry] = []
         for field, new_val in payload.felder.items():
             old_val = getattr(lead, field, None)
             alt_str = json.dumps(old_val, ensure_ascii=False) if isinstance(old_val, (dict, list)) else ("" if old_val is None else str(old_val))
@@ -558,7 +559,7 @@ def create_app(store: LeadStore | None = None) -> FastAPI:
             if alt_str != neu_str:
                 if field not in lead.gesperrte_felder:
                     lead.gesperrte_felder.append(field)
-                store.add_change_entry(AenderungEntry(
+                change_entries.append(AenderungEntry(
                     lead_id=lead.lead_id,
                     firma=lead.firma,
                     feld=field,
@@ -570,6 +571,9 @@ def create_app(store: LeadStore | None = None) -> FastAPI:
                 ))
                 if field not in ("website", "teilscores"):
                     setattr(lead, field, new_val)
+
+        if change_entries:
+            store.add_change_entries(change_entries)
 
         lead.aktualisiert_am = now_iso
         lead._force_manual_update = True
