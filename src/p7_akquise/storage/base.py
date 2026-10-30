@@ -108,3 +108,11 @@ class LeadStore(ABC):
     def delete_lead(self, domain_or_id: str) -> bool:
         """Löscht einen Lead aus dem aktiven Bestand und trägt ihn als verworfen ein."""
         pass
+
+    def delete_leads(self, domain_or_ids: list[str], grund: str = "Manuell gelöscht (irrelevant)") -> int:
+        """Löscht mehrere Leads aus dem aktiven Bestand und trägt sie als verworfen ein."""
+        count = 0
+        for item in domain_or_ids:
+            if self.delete_lead(item):
+                count += 1
+        return count

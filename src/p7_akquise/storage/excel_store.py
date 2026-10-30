@@ -795,9 +795,14 @@ class ExcelStore(LeadStore):
         wb.close()
         return False
 
-    def delete_lead(self, domain_or_id: str) -> bool:
-        """Löscht einen Lead aus dem Blatt 'Leads' und trägt ihn als verworfen ein."""
-        target_norm = normalize_domain(domain_or_id)
+    def delete_leads(self, domain_or_ids: list[str], grund: str = "Manuell gelöscht (irrelevant)") -> int:
+        """Löscht mehrere Leads aus dem Blatt 'Leads' und trägt sie als verworfen ein."""
+        if not domain_or_ids:
+            return 0
+
+        target_set = {str(x).strip() for x in domain_or_ids if str(x).strip()}
+        target_norms = {normalize_domain(x) for x in target_set if not x.startswith("name:")}
+
         wb = self._load_workbook()
         ws = wb["Leads"]
 
@@ -806,9 +811,7 @@ class ExcelStore(LeadStore):
         domain_idx = keys.index("domain") + 1
         firma_idx = keys.index("firma") + 1
 
-        row_to_delete = None
-        deleted_domain = ""
-        deleted_firma = ""
+        to_delete: list[tuple[int, str, str]] = []  # (row_idx, domain, firma)
 
         for row_idx in range(2, ws.max_row + 1):
             val_id = ws.cell(row=row_idx, column=lead_id_idx).value
@@ -816,25 +819,36 @@ class ExcelStore(LeadStore):
             if not val_dom and not val_id:
                 continue
 
-            if str(val_id) == domain_or_id or (val_dom and normalize_domain(str(val_dom)) == target_norm):
-                row_to_delete = row_idx
-                deleted_domain = str(val_dom) if val_dom else domain_or_id
-                deleted_firma = str(ws.cell(row=row_idx, column=firma_idx).value or "")
-                break
+            str_id = str(val_id).strip() if val_id is not None else ""
+            str_dom = str(val_dom).strip() if val_dom is not None else ""
+            norm_dom = normalize_domain(str_dom) if str_dom and not str_dom.startswith("name:") else str_dom
 
-        if row_to_delete:
-            ws.delete_rows(row_to_delete)
-            # Ins Blatt 'Verworfen' eintragen, damit nicht erneut recherchiert
-            ws_verworfen = wb["Verworfen"]
-            target_v_row = ws_verworfen.max_row + 1
-            ws_verworfen.cell(row=target_v_row, column=1, value=normalize_domain(deleted_domain))
-            ws_verworfen.cell(row=target_v_row, column=2, value=deleted_firma)
-            ws_verworfen.cell(row=target_v_row, column=3, value="Manuell gelöscht (irrelevant)")
-            ws_verworfen.cell(row=target_v_row, column=4, value=datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+            if str_id in target_set or str_dom in target_set or (norm_dom and norm_dom in target_norms):
+                firma_val = str(ws.cell(row=row_idx, column=firma_idx).value or "")
+                to_delete.append((row_idx, str_dom or str_id, firma_val))
 
-            self._save(wb)
+        if not to_delete:
             wb.close()
-            return True
+            return 0
 
+        # Sortiere Zeilen absteigend, damit delete_rows keine nachfolgenden Indizes verschiebt
+        to_delete.sort(key=lambda x: x[0], reverse=True)
+
+        ws_verworfen = wb["Verworfen"]
+        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+        for r_idx, dom, firma in to_delete:
+            ws.delete_rows(r_idx)
+            v_row = ws_verworfen.max_row + 1
+            ws_verworfen.cell(row=v_row, column=1, value=normalize_domain(dom))
+            ws_verworfen.cell(row=v_row, column=2, value=firma)
+            ws_verworfen.cell(row=v_row, column=3, value=grund)
+            ws_verworfen.cell(row=v_row, column=4, value=today_str)
+
+        self._save(wb)
         wb.close()
-        return False
+        return len(to_delete)
+
+    def delete_lead(self, domain_or_id: str) -> bool:
+        """Löscht einen Lead aus dem Blatt 'Leads' und trägt ihn als verworfen ein."""
+        return self.delete_leads([domain_or_id]) > 0

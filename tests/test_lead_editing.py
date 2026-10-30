@@ -232,6 +232,13 @@ def test_dashboard_html_dom_counts_bar_and_editing_elements(store):
     assert "/api/leads/${leadId}/neu-bewerten" in html or "neu-bewerten" in html
     assert "/api/leads/${leadId}/aenderungen" in html or "aenderungen" in html
 
+    # Massenlöschung
+    assert 'id="bulk-actions"' in html
+    assert 'id="select-all-leads"' in html
+    assert "bulkDeleteSelected" in html
+    assert "toggleSelectAll" in html
+    assert "batch-delete" in html
+
 
 def test_aenderungen_csv_export(store):
     c = client(store)
@@ -253,4 +260,37 @@ def test_aenderungen_csv_export(store):
     assert "Lead ID;Unternehmen;Feld;Alter Wert;Neuer Wert;Benutzer;Zeitpunkt;Grund" in content
     assert "Winterthur" in content
     assert "Telefonische Bestätigung" in content
+
+
+def test_batch_delete_leads(store):
+    store.upsert_lead(Lead(domain="d1.ch", firma="D1 AG", status="zur Prüfung", score=60, klasse="B"))
+    store.upsert_lead(Lead(domain="d2.ch", firma="D2 AG", status="beobachten", score=40, klasse="C"))
+    store.upsert_lead(Lead(domain="keep.ch", firma="Keep AG", status="freigegeben", score=80, klasse="A"))
+
+    l1 = store.get_lead_by_domain("d1.ch")
+    l2 = store.get_lead_by_domain("d2.ch")
+    c = client(store)
+
+    # 422 wenn leer
+    assert c.post("/api/leads/batch-delete", json={"lead_ids": []}).status_code == 422
+
+    # Massenlöschung
+    res = c.post("/api/leads/batch-delete", json={
+        "lead_ids": [l1.lead_id, l2.lead_id],
+        "grund": "Massenlöschung Test"
+    })
+    assert res.status_code == 200
+    assert res.json()["deleted_count"] == 2
+
+    # d1 und d2 gelöscht, keep noch da
+    assert store.get_lead_by_domain("d1.ch") is None
+    assert store.get_lead_by_domain("d2.ch") is None
+    assert store.get_lead_by_domain("keep.ch") is not None
+
+    # In Verworfen eingetragen
+    rejected = store.get_rejected_leads()
+    rej_domains = {r.domain for r in rejected}
+    assert "d1.ch" in rej_domains
+    assert "d2.ch" in rej_domains
+
 

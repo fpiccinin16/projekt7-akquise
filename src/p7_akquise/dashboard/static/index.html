@@ -656,13 +656,23 @@
         <!-- Left: Table -->
         <div class="table-pane">
             <div class="table-counts-bar" id="table-counts-bar">
-                <span id="leads-counter">Lade Leads...</span>
-                <a href="javascript:void(0)" id="reset-filter-btn" class="reset-link" style="display: none;" onclick="resetFilters()">Filter zurücksetzen</a>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span id="leads-counter">Lade Leads...</span>
+                    <a href="javascript:void(0)" id="reset-filter-btn" class="reset-link" style="display: none;" onclick="resetFilters()">Filter zurücksetzen</a>
+                </div>
+                <div id="bulk-actions" style="display: none; align-items: center; gap: 8px;">
+                    <span id="bulk-selected-count" style="color: var(--brand-navy); font-weight: 700; font-size: 12px;">0 ausgewählt</span>
+                    <button class="btn btn-outline" style="color: #ef4444; border-color: #fca5a5; background: #fff5f5; font-size: 11px; padding: 4px 10px;" onclick="bulkDeleteSelected()">🗑️ Ausgewählte löschen</button>
+                    <button class="btn btn-outline" style="color: var(--text-muted); border-color: var(--border-color); font-size: 11px; padding: 4px 8px;" onclick="clearSelection()">Auswahl aufheben</button>
+                </div>
             </div>
             <div class="table-scroll-container">
                 <table class="leads-table">
                     <thead>
                         <tr>
+                            <th style="width: 32px; text-align: center; padding: 10px 8px;">
+                                <input type="checkbox" id="select-all-leads" title="Alle sichtbaren Leads auswählen" onchange="toggleSelectAll(this.checked)" style="cursor: pointer;">
+                            </th>
                             <th>Unternehmen</th>
                             <th>Segment</th>
                             <th>Herkunft</th>
@@ -714,6 +724,7 @@
         let debounceTimer = null;
         let isEditing = false;
         let globalCounts = { total: 0, status: {}, klasse: {}, segment: {}, quelle_kanal: {} };
+        let selectedLeadIds = new Set();
 
         function esc(str) {
             if (str === null || str === undefined) return '';
@@ -924,20 +935,119 @@
             }
         }
 
+        function toggleSelectAll(checked) {
+            if (checked) {
+                currentLeads.forEach(l => selectedLeadIds.add(l.lead_id));
+            } else {
+                currentLeads.forEach(l => selectedLeadIds.delete(l.lead_id));
+            }
+            updateBulkUi();
+            renderTable();
+        }
+
+        function toggleLeadSelection(leadId, checked) {
+            if (checked) {
+                selectedLeadIds.add(leadId);
+            } else {
+                selectedLeadIds.delete(leadId);
+            }
+            updateBulkUi();
+        }
+
+        function clearSelection() {
+            selectedLeadIds.clear();
+            updateBulkUi();
+            renderTable();
+        }
+
+        function updateBulkUi() {
+            const count = selectedLeadIds.size;
+            const bulkDiv = document.getElementById('bulk-actions');
+            const countSpan = document.getElementById('bulk-selected-count');
+            const selectAllChk = document.getElementById('select-all-leads');
+
+            if (count > 0) {
+                if (bulkDiv) bulkDiv.style.display = 'flex';
+                if (countSpan) countSpan.innerText = count + ' ausgewählt';
+            } else {
+                if (bulkDiv) bulkDiv.style.display = 'none';
+            }
+
+            if (selectAllChk) {
+                const visibleCount = currentLeads.length;
+                const visibleSelected = currentLeads.filter(l => selectedLeadIds.has(l.lead_id)).length;
+                selectAllChk.checked = visibleCount > 0 && visibleSelected === visibleCount;
+                selectAllChk.indeterminate = visibleSelected > 0 && visibleSelected < visibleCount;
+            }
+        }
+
+        async function bulkDeleteSelected() {
+            const count = selectedLeadIds.size;
+            if (count === 0) return;
+
+            const confirmMsg = count === 1
+                ? 'Möchten Sie diesen 1 ausgewählten Lead wirklich löschen?\n\nEr wird aus der Übersicht entfernt und als verworfen markiert, damit die Websuche ihn nicht erneut vorschlägt.'
+                : `Möchten Sie diese ${count} ausgewählten Leads wirklich löschen?\n\nSie werden aus der Übersicht entfernt und als verworfen markiert, damit die Websuche sie nicht erneut vorschlägt.`;
+
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+
+            const ids = Array.from(selectedLeadIds);
+            try {
+                const res = await fetch('/api/leads/batch-delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lead_ids: ids, grund: 'Massenlöschung durch Benutzer' })
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    alert('Fehler beim Löschen: ' + (err.detail || 'Unbekannter Fehler'));
+                    return;
+                }
+
+                const data = await res.json();
+                alert(data.message || `${count} Leads erfolgreich gelöscht.`);
+                selectedLeadIds.clear();
+                updateBulkUi();
+
+                if (selectedLeadId && ids.includes(selectedLeadId)) {
+                    selectedLeadId = null;
+                    document.getElementById('detail-pane').innerHTML = `
+                        <div style="text-align: center; padding: 60px 20px; color: var(--text-muted);">
+                            Ausgewählte Leads wurden gelöscht. Wähle einen anderen Lead aus der Tabelle aus.
+                        </div>
+                    `;
+                }
+
+                await loadCounts();
+                await loadKPIs();
+                await loadLeads();
+            } catch (e) {
+                alert('Netzwerkfehler bei der Massenlöschung.');
+            }
+        }
+
         function renderTable() {
             const tbody = document.getElementById('leads-tbody');
             if (currentLeads.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 30px; color: var(--text-muted);">Keine Leads gefunden. Importiere eine Adressliste oder starte einen Lauf.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 30px; color: var(--text-muted);">Keine Leads gefunden. Importiere eine Adressliste oder starte einen Lauf.</td></tr>';
+                updateBulkUi();
                 return;
             }
 
             tbody.innerHTML = currentLeads.map(lead => {
                 const isSelected = lead.lead_id === selectedLeadId ? 'selected' : '';
+                const isChecked = selectedLeadIds.has(lead.lead_id);
                 const scoreClass = lead.klasse === 'A' ? 'score-a' : (lead.klasse === 'B' ? 'score-b' : 'score-c');
                 const statusSlug = (lead.status || 'neu').replace(/\s+/g, '-');
 
                 return `
                 <tr class="${isSelected}" onclick="selectLead('${lead.lead_id}')">
+                    <td style="text-align: center; width: 32px; padding: 12px 8px;" onclick="event.stopPropagation();">
+                        <input type="checkbox" class="lead-select-chk" data-lead-id="${lead.lead_id}" ${isChecked ? 'checked' : ''} onchange="toggleLeadSelection('${lead.lead_id}', this.checked)" style="cursor: pointer;">
+                    </td>
                     <td class="company-col">
                         <strong>${esc(lead.firma)}</strong>
                         <span>${esc(lead.ort || (lead.domain.startsWith('name:') ? 'Website offen' : lead.domain))} | ${esc(lead.branche || 'Branche offen')}</span>
@@ -957,6 +1067,8 @@
                 </tr>
                 `;
             }).join('');
+
+            updateBulkUi();
 
             // Falls noch keiner ausgewählt ist, ersten auswählen
             if (!selectedLeadId && currentLeads.length > 0) {

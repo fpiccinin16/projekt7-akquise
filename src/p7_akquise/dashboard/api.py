@@ -77,6 +77,11 @@ class SperreAufhebenPayload(BaseModel):
     feld: str
 
 
+class BatchDeletePayload(BaseModel):
+    lead_ids: list[str]
+    grund: str = "Manuell gelöscht (irrelevant)"
+
+
 def create_app(store: LeadStore | None = None) -> FastAPI:
     if store is not None:
         set_lead_store(store)
@@ -367,6 +372,22 @@ def create_app(store: LeadStore | None = None) -> FastAPI:
         if not success:
             raise HTTPException(status_code=404, detail="Lead nicht gefunden.")
         return {"success": True, "message": "Lead erfolgreich gelöscht und auf 'Verworfen' gesetzt."}
+
+    # 6b2. Massenlöschung von Leads
+    @app.post("/api/leads/batch-delete")
+    @app.delete("/api/leads")
+    def batch_delete_leads(
+        payload: BatchDeletePayload,
+        store: LeadStore = Depends(get_lead_store),
+    ) -> dict[str, Any]:
+        if not payload.lead_ids:
+            raise HTTPException(status_code=422, detail="Keine Leads zum Löschen übergeben.")
+        count = store.delete_leads(payload.lead_ids, grund=payload.grund)
+        return {
+            "success": True,
+            "deleted_count": count,
+            "message": f"{count} Lead(s) erfolgreich gelöscht und auf 'Verworfen' gesetzt.",
+        }
 
     # 6c. Lead bearbeiten (PATCH)
     @app.patch("/api/leads/{lead_id}")
